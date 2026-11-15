@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>External consumer check</title>
+<body data-result="pending">
+<pre id="output"></pre>
+<script>
+let passed = false;
+var Module = {
+    print(line) {
+        document.getElementById("output").textContent += line + "\n";
+        if (line === "external consumer passed") passed = true;
+    },
+    printErr(line) { document.getElementById("output").textContent += line + "\n"; },
+    onExit(code) {
+        const bridges = Module.p2pdcRecordBridge && Module.p2pdcWebRtcBridge;
+        document.body.dataset.result = code === 0 && passed && bridges ? "pass" : "fail";
+    },
+    onAbort(reason) {
+        document.getElementById("output").textContent += reason;
+        document.body.dataset.result = "fail";
+    },
+};
+</script>
+<script src="../../build-external-wasm/external_consumer.js"></script>
+</body>

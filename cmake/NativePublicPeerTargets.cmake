@@ -1,0 +1,6 @@
+add_executable(p2pdc_browser_native_dht_peer EXCLUDE_FROM_ALL tests/browser_native_dht_peer.cpp)
+target_link_libraries(p2pdc_browser_native_dht_peer PRIVATE p2pdc::p2pdc)
+target_compile_options(p2pdc_browser_native_dht_peer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_executable(p2pdc_native_mixed_race EXCLUDE_FROM_ALL tests/native_mixed_race_main.cpp tests/node_mixed_race.cpp)
+target_link_libraries(p2pdc_native_mixed_race PRIVATE p2pdc::p2pdc)
+target_compile_options(p2pdc_native_mixed_race PRIVATE -Wall -Wextra -Wpedantic -Werror)

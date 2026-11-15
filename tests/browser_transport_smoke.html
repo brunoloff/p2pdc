@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>p2pdc C++ WebRTC transport test</title>
+<body data-result="pending">pending</body>
+<script>
+window.addEventListener('error', event => {
+    document.body.dataset.result = 'fail'; document.body.textContent = `fail: ${event.message}`;
+});
+window.addEventListener('unhandledrejection', event => {
+    document.body.dataset.result = 'fail'; document.body.textContent = `fail: ${event.reason}`;
+});
+</script>
+<script src="../build-wasm-auth/p2pdc_browser_transport_smoke.js"></script>

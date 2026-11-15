@@ -1,0 +1,250 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d272f0b..258623c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -358,6 +358,11 @@ target_link_libraries(datachannel-static PRIVATE
+ 	Usrsctp::Usrsctp
+ 	$<BUILD_INTERFACE:plog::plog>)
+ 
++if(USE_NICE AND UNIX AND NOT APPLE)
++	target_link_libraries(datachannel PRIVATE ${CMAKE_DL_LIBS})
++	target_link_libraries(datachannel-static PUBLIC ${CMAKE_DL_LIBS})
++endif()
++
+ if(WIN32)
+ 	target_link_libraries(datachannel PUBLIC ws2_32) # winsock2
+ 	target_link_libraries(datachannel-static PUBLIC ws2_32) # winsock2
+diff --git a/include/rtc/global.hpp b/include/rtc/global.hpp
+index 84317f4..c23eb18 100644
+--- a/include/rtc/global.hpp
++++ b/include/rtc/global.hpp
+@@ -34,6 +34,9 @@ RTC_CPP_EXPORT void InitLogger(LogLevel level, LogCallback callback = nullptr);
+ RTC_CPP_EXPORT void Preload();
+ RTC_CPP_EXPORT std::shared_future<void> Cleanup();
+ 
++// p2pdc patch: bits 0-3 = send admission, force-relay, safe detach, TURN TLS.
++RTC_CPP_EXPORT unsigned int P2pdcBackendFeatures() noexcept;
++
+ struct SctpSettings {
+ 	// For the following settings, not set means optimized default
+ 	optional<size_t> recvBufferSize;                // in bytes
+diff --git a/src/global.cpp b/src/global.cpp
+index a7ed576..1f40ead 100644
+--- a/src/global.cpp
++++ b/src/global.cpp
+@@ -19,9 +19,36 @@
+ #include "impl/init.hpp"
+ 
+ #include <mutex>
++#if USE_NICE && defined(__linux__) && !defined(__ANDROID__)
++#include <dlfcn.h>
++#include <nice/agent.h>
++#endif
++
++#if USE_NICE && __has_include(<nice/nice-version.h>)
++#include <nice/nice-version.h>
++#endif
+ 
+ namespace {
+ 
++#if USE_NICE && defined(__linux__) && !defined(__ANDROID__)
++bool p2pdcNiceTlsSupported() noexcept {
++	Dl_info backend{};
++	if (!dladdr(reinterpret_cast<void *>(&nice_agent_set_relay_info), &backend) ||
++	    !backend.dli_fname)
++		return false;
++	void *handle = dlopen(backend.dli_fname, RTLD_NOW | RTLD_NOLOAD);
++	if (!handle)
++		return false;
++	void *symbol = dlsym(handle, "nice_p2pdc_tls_supported");
++	Dl_info provider{};
++	const bool sameLibrary = symbol && dladdr(symbol, &provider) &&
++	                         provider.dli_fbase == backend.dli_fbase;
++	const bool supported = sameLibrary && reinterpret_cast<unsigned int (*)()>(symbol)() == 1;
++	dlclose(handle);
++	return supported;
++}
++#endif
++
+ void plogInit(plog::Severity severity, plog::IAppender *appender) {
+ 	using Logger = plog::Logger<PLOG_DEFAULT_INSTANCE_ID>;
+ 	static Logger *logger = nullptr;
+@@ -86,6 +113,26 @@ void InitLogger(plog::Severity severity, plog::IAppender *appender) {
+ void Preload() { impl::Init::Instance().preload(); }
+ std::shared_future<void> Cleanup() { return impl::Init::Instance().cleanup(); }
+ 
++unsigned int P2pdcBackendFeatures() noexcept {
++#if USE_NICE
++#if defined(NICE_VERSION_MAJOR) && \
++    (NICE_VERSION_MAJOR > 0 || NICE_VERSION_MINOR > 1 || \
++     (NICE_VERSION_MINOR == 1 && NICE_VERSION_MICRO >= 24))
++	unsigned int features = 7;
++#else
++	// An old-header build can load the incompatible 0.1.24 runtime later.
++	unsigned int features = 3;
++#endif
++#if defined(__linux__) && !defined(__ANDROID__)
++	if (p2pdcNiceTlsSupported())
++		features |= 8;
++#endif
++	return features;
++#else
++	return 5;
++#endif
++}
++
+ void SetSctpSettings(SctpSettings s) { impl::Init::Instance().setSctpSettings(std::move(s)); }
+ 
+ std::ostream &operator<<(std::ostream &out, LogLevel level) {
+diff --git a/src/impl/icetransport.cpp b/src/impl/icetransport.cpp
+index f28422c..1a12576 100644
+--- a/src/impl/icetransport.cpp
++++ b/src/impl/icetransport.cpp
+@@ -17,6 +17,10 @@
+ #include <random>
+ #include <sstream>
+ 
++#if USE_NICE && __has_include(<nice/nice-version.h>)
++#include <nice/nice-version.h>
++#endif
++
+ #ifdef _WIN32
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+@@ -464,6 +468,16 @@ IceTransport::IceTransport(const Configuration &config, candidate_callback candi
+ 	if (!mNiceAgent)
+ 		throw std::runtime_error("Failed to create the nice agent");
+ 
++	if (config.iceTransportPolicy == TransportPolicy::Relay) {
++		if (!g_object_class_find_property(G_OBJECT_GET_CLASS(mNiceAgent.get()), "force-relay"))
++			throw std::runtime_error("libnice does not support force-relay");
++		g_object_set(G_OBJECT(mNiceAgent.get()), "force-relay", TRUE, nullptr);
++		gboolean forceRelay = FALSE;
++		g_object_get(G_OBJECT(mNiceAgent.get()), "force-relay", &forceRelay, nullptr);
++		if (!forceRelay)
++			throw std::runtime_error("libnice failed to enable force-relay");
++	}
++
+ 	mStreamId = nice_agent_add_stream(mNiceAgent.get(), 1);
+ 	if (!mStreamId)
+ 		throw std::runtime_error("Failed to add a stream");
+@@ -610,6 +624,17 @@ void IceTransport::addIceServer(IceServer server) {
+ 	if (server.port == 0)
+ 		server.port = server.relayType == IceServer::RelayType::TurnTls ? 5349 : 3478;
+ 
++	if (server.relayType == IceServer::RelayType::TurnTls) {
++		if ((rtc::P2pdcBackendFeatures() & 8U) == 0) {
++			PLOG_WARNING << "TURN TLS requires the p2pdc libnice TLS patch";
++			return;
++		}
++		nice_agent_set_relay_info(mNiceAgent.get(), mStreamId, 1, server.hostname.c_str(),
++		                          server.port, server.username.c_str(), server.password.c_str(),
++		                          NICE_RELAY_TYPE_TURN_TLS);
++		return;
++	}
++
+ 	struct addrinfo hints = {};
+ 	hints.ai_family = AF_UNSPEC;
+ 	hints.ai_socktype =
+@@ -657,8 +682,17 @@ void IceTransport::addIceServer(IceServer server) {
+ 
+ IceTransport::~IceTransport() {
+ 	PLOG_DEBUG << "Destroying ICE transport";
++#if defined(NICE_VERSION_MAJOR) && \
++    (NICE_VERSION_MAJOR > 0 || NICE_VERSION_MINOR > 1 || \
++     (NICE_VERSION_MINOR == 1 && NICE_VERSION_MICRO >= 24))
++	// libnice 0.1.24's legacy wrapper keeps a non-null adapter around a null
++	// callback. Use the extended API so detachment really disables reception.
++	nice_agent_attach_recv_ex(mNiceAgent.get(), mStreamId, 1,
++	                          g_main_loop_get_context(MainLoop->get()), NULL, NULL, NULL);
++#else
+ 	nice_agent_attach_recv(mNiceAgent.get(), mStreamId, 1, g_main_loop_get_context(MainLoop->get()),
+ 	                       NULL, NULL);
++#endif
+ 	nice_agent_remove_stream(mNiceAgent.get(), mStreamId);
+ 	mNiceAgent.reset();
+ 
+diff --git a/src/impl/init.cpp b/src/impl/init.cpp
+index aad72dd..2e6f123 100644
+--- a/src/impl/init.cpp
++++ b/src/impl/init.cpp
+@@ -118,8 +118,8 @@ void Init::doInit() {
+ 		throw std::runtime_error("WSAStartup failed, error=" + std::to_string(WSAGetLastError()));
+ #endif
+ 
+-	int concurrency = std::thread::hardware_concurrency();
+-	int count = std::max(concurrency, MIN_THREADPOOL_SIZE);
++	// p2pdc: avoid a machine-sized pool for a small data-channel workload.
++	int count = MIN_THREADPOOL_SIZE;
+ 	PLOG_DEBUG << "Spawning " << count << " threads";
+ 	ThreadPool::Instance().spawn(count);
+ 
+diff --git a/src/impl/queue.hpp b/src/impl/queue.hpp
+index 1fb8595..a4f812c 100644
+--- a/src/impl/queue.hpp
++++ b/src/impl/queue.hpp
+@@ -33,7 +33,7 @@ public:
+ 	bool full() const;
+ 	size_t size() const;   // elements
+ 	size_t amount() const; // amount
+-	void push(T element);
++	bool push(T element);
+ 	optional<T> pop();
+ 	optional<T> peek();
+ 	optional<T> exchange(T element);
+@@ -87,14 +87,16 @@ template <typename T> size_t Queue<T>::amount() const {
+ 	return mAmount;
+ }
+ 
+-template <typename T> void Queue<T>::push(T element) {
++template <typename T> bool Queue<T>::push(T element) {
+ 	std::unique_lock lock(mMutex);
+ 	mPushCondition.wait(lock, [this]() { return mLimit == 0 || mQueue.size() < mLimit || mStopping; });
+ 	if (mStopping)
+-		return;
++		return false;
+ 
+-	mAmount += mAmountFunction(element);
++	const auto amount = mAmountFunction(element);
+ 	mQueue.emplace(std::move(element));
++	mAmount += amount;
++	return true;
+ }
+ 
+ template <typename T> optional<T> Queue<T>::pop() {
+diff --git a/src/impl/sctptransport.cpp b/src/impl/sctptransport.cpp
+index 45e7348..17733b4 100644
+--- a/src/impl/sctptransport.cpp
++++ b/src/impl/sctptransport.cpp
+@@ -373,8 +373,11 @@ void SctpTransport::connect() {
+ 
+ bool SctpTransport::send(message_ptr message) {
+ 	std::lock_guard lock(mSendMutex);
+-	if (state() != State::Connected)
++	if (state() != State::Connected) {
++		if (message)
++			throw std::runtime_error("SCTP is not connected; message was not accepted");
+ 		return false;
++	}
+ 
+ 	if (!message)
+ 		return trySendQueue();
+@@ -388,7 +391,8 @@ bool SctpTransport::send(message_ptr message) {
+ 	if (trySendQueue() && trySendMessage(message))
+ 		return true;
+ 
+-	mSendQueue.push(message);
++	if (!mSendQueue.push(message))
++		throw std::runtime_error("SCTP send queue is stopped; message was not accepted");
+ 	updateBufferedAmount(to_uint16(message->stream), ptrdiff_t(message_size_func(message)));
+ 	return false;
+ }
+@@ -599,7 +603,7 @@ bool SctpTransport::trySendQueue() {
+ bool SctpTransport::trySendMessage(message_ptr message) {
+ 	// Requires mSendMutex to be locked
+ 	if (state() != State::Connected)
+-		return false;
++		throw std::runtime_error("SCTP disconnected while sending");
+ 
+ 	uint32_t ppid;
+ 	switch (message->type) {

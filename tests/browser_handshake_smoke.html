@@ -1,0 +1,8 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>p2pdc browser handshake smoke test</title>
+<body data-result="pending">pending</body>
+<script type="module">
+import createModule from "../build-wasm-auth/p2pdc_browser_handshake_smoke.mjs";
+createModule().catch(() => { document.body.dataset.result = "fail"; document.body.textContent = "fail: module initialization"; });
+</script>

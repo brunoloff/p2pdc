@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <body>pending<script>
+(async () => {
+  const a = new RTCPeerConnection({iceServers: []});
+  const b = new RTCPeerConnection({iceServers: []});
+  const waitIce = pc => new Promise(resolve => {
+    if (pc.iceGatheringState === 'complete') return resolve();
+    pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') resolve(); });
+  });
+  const result = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(Error('timeout')), 10000);
+    b.ondatachannel = event => { event.channel.binaryType = 'arraybuffer'; event.channel.onmessage = message => event.channel.send(message.data); };
+    const channel = a.createDataChannel('p2pdc-browser-smoke');
+    channel.binaryType = 'arraybuffer';
+    channel.onopen = () => channel.send(new Uint8Array([0,255,17]));
+    channel.onmessage = message => { clearTimeout(timeout); const bytes = new Uint8Array(message.data); resolve(bytes.length === 3 && bytes[0] === 0 && bytes[1] === 255 && bytes[2] === 17); };
+  });
+  try {
+    await a.setLocalDescription(await a.createOffer()); await waitIce(a);
+    await b.setRemoteDescription(a.localDescription); await b.setLocalDescription(await b.createAnswer()); await waitIce(b);
+    await a.setRemoteDescription(b.localDescription);
+    const echoed = await result;
+    const stats = await a.getStats();
+    let pair;
+    stats.forEach(s => { if (s.type === 'transport' && s.selectedCandidatePairId) pair = stats.get(s.selectedCandidatePairId); });
+    const local = pair && stats.get(pair.localCandidateId), remote = pair && stats.get(pair.remoteCandidateId);
+    document.body.textContent = `echo=${echoed} local=${local?.candidateType ?? 'unknown'} remote=${remote?.candidateType ?? 'unknown'}`;
+  } catch (error) { document.body.textContent = 'error=' + error.message; }
+  finally { a.close(); b.close(); }
+})();
+</script></body>
+</html>

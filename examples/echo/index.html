@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>p2pdc echo example</title>
+<h1>p2pdc echo example</h1>
+<p>Use disposable test identities. The page and its scripts can read the values entered here.</p>
+<form id="settings">
+  <label>Role <select name="ROLE"><option value="initiator">Initiator</option><option value="responder">Responder</option></select></label><br>
+  <label>Discovery capability <input name="CAPABILITY" type="password" required></label><br>
+  <label>Your signing seed <input name="SEED" type="password" required></label><br>
+  <label>Your recipient secret <input name="SECRET" type="password" required></label><br>
+  <label>Authorized peer signing key <input name="PEER_KEY" required></label><br>
+  <label>HTTPS OpenDHT proxy <input name="PROXY" required></label><br>
+  <label>Network ID <input name="NETWORK" value="0"></label><br>
+  <label>STUN host <input name="STUN_HOST"></label><br>
+  <label>STUN port <input name="STUN_PORT"></label><br>
+  <label>TURN host <input name="TURN_HOST"></label><br>
+  <label>TURN port <input name="TURN_PORT"></label><br>
+  <label>TURN user <input name="TURN_USER"></label><br>
+  <label>TURN password <input name="TURN_PASSWORD" type="password"></label><br>
+  <label>TURN transport <select name="TURN_TRANSPORT"><option value="">Default (UDP)</option><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">TLS</option></select></label><br>
+  <label>Relay policy <select name="RELAY_POLICY"><option value="automatic">Automatic</option><option value="required">Required</option></select></label><br>
+  <button type="submit">Start</button>
+  <button type="button" id="derive">Derive signing public key</button>
+</form>
+<pre id="output"></pre>
+<script>
+const form = document.getElementById("settings");
+const output = document.getElementById("output");
+function launch(values, args) {
+    for (const button of form.querySelectorAll("button")) button.disabled = true;
+    window.Module = {
+        arguments: args,
+        p2pdcEchoEnvironment: values,
+        print: text => { output.textContent += `${text}\n`; },
+        printErr: text => { output.textContent += `${text}\n`; },
+    };
+    const script = document.createElement("script");
+    script.src = "../../build-wasm-auth/p2pdc_echo.js";
+    script.onerror = () => { output.textContent += "Could not load the WebAssembly build.\n"; };
+    document.body.appendChild(script);
+}
+form.addEventListener("submit", event => {
+    event.preventDefault();
+    const values = {};
+    for (const [name, value] of new FormData(form)) {
+        if (value !== "") values[`P2PDC_ECHO_${name}`] = value;
+    }
+    launch(values, []);
+});
+document.getElementById("derive").addEventListener("click", () => {
+    const seed = form.elements.SEED.value;
+    if (!/^[0-9a-fA-F]{64}$/.test(seed)) {
+        output.textContent = "Enter a 32-byte hexadecimal signing seed first.\n";
+        return;
+    }
+    output.textContent = "Copy the public key below, then reload the page to start a session.\n";
+    launch({ P2PDC_ECHO_SEED: seed }, ["--public-key"]);
+});
+</script>
