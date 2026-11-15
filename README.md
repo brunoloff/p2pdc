@@ -19,7 +19,8 @@ Resource limits do not bound all process or backend memory. Do
 not use the library for production.
 
 See [first alpha status](docs/ALPHA_STATUS.md) for the current validation and
-remaining release work.
+remaining release work. The original plan and Xournal++ survey are retained as
+[historical references](docs/history/README.md).
 
 `p2pdc/ice_config.h` defines backend-independent STUN and TURN server settings
 and automatic or local-relay-required policy. Native connection attempts use
