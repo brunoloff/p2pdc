@@ -2,7 +2,8 @@
 
 This source alpha provides OpenDHT discovery and authenticated, reliable,
 ordered binary WebRTC connections through the same C++ API on Linux and in
-browser WebAssembly. It reports observed direct or TURN-relayed routes.
+browser WebAssembly. It reports observed direct or TURN-relayed routes. The
+release has been prepared locally; it has not been published.
 
 The supported alpha targets are Linux and the tested Chromium and Firefox
 versions in [dependency versions](docs/DEPENDENCIES.md). Android, Safari,

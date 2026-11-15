@@ -37,7 +37,7 @@ workload and is not a library dependency.
   offline edits and catch-up after a new native connection. It does not test a
   Yjs/browser peer.
 
-## Remaining before a supported alpha
+## Limitations and next work
 
 The authoritative release scope and post-alpha deferrals are tracked in
 [TODO.md](../TODO.md). In particular, protocol freeze, expanded adversarial and
@@ -52,9 +52,8 @@ deferred until after the first alpha.
 - Native TURN/TLS requires the patched libnice backend; an unpatched backend is
   rejected. Errors without a specific backend cause remain generic, and
   relay-only privacy verification is deferred.
-- Prepare a reviewable release history and distribution. The library's local
-  Git repository currently has no commits or configured remote; no release tag
-  or package has been created.
+- The source release and its Git history are local. No remote or published
+  package is configured.
 
 Do not treat test success as proof of production readiness or continuous
 availability when the browser or mobile operating system suspends an app.
