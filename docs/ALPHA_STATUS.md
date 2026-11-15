@@ -1,7 +1,7 @@
 # First alpha status
 
 Status as of 2026-11-15: the library is an experimental implementation; the
-first alpha is prepared locally and has not been published. Its targets are
+first alpha source and tag are in a private GitHub repository. Its targets are
 Linux and browser WebAssembly in tested Chromium and Firefox versions; Android
 work resumes tomorrow. Safari and mobile-browser support are not yet tested.
 The public C++ consumer interface is
@@ -52,8 +52,8 @@ deferred until after the first alpha.
 - Native TURN/TLS requires the patched libnice backend; an unpatched backend is
   rejected. Errors without a specific backend cause remain generic, and
   relay-only privacy verification is deferred.
-- The source release and its Git history are local. No remote or published
-  package is configured.
+- The source and release tag are in a private GitHub repository. No separate
+  GitHub Release or binary package has been published.
 
 Do not treat test success as proof of production readiness or continuous
 availability when the browser or mobile operating system suspends an app.

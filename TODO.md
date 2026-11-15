@@ -49,7 +49,7 @@ only a reference workload, not a library dependency.
 - [x] Prepare pinned dependencies, clean build and consumer instructions,
   platform limitations, protocol version, test commands, reviewable source
   history and a local source-release artifact. Host-provided dependencies are
-  recorded by version; no remote or published release is configured.
+  recorded by version; the source and tag are pushed to a private repository.
 - [x] Run the final release matrix using controlled local infrastructure;
   public-network tests remain opt-in.
 
