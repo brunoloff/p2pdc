@@ -52,7 +52,7 @@ struct Node::State {
     void close_connections();
     void close_incoming();
 #ifdef P2PDC_HAVE_DISCOVERY
-    [[nodiscard]] std::optional<detail::AnnouncementEndpoint> endpoint_for_lease();
+    [[nodiscard]] std::optional<detail::AnnouncementEndpoint> endpoint_for_lease(bool fresh);
     [[nodiscard]] detail::RecordStore make_store(detail::StoreLimits limits) const;
 #endif
 

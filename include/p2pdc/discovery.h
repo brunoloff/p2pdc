@@ -113,6 +113,12 @@ struct AnnounceOptions {
     std::size_t max_publications = 32;   // 1 through 32 per 120 s window, including retries.
     std::size_t max_pending_events = 32; // 1 through 256.
     DiscoveryProtocol protocol = DiscoveryProtocol::RotatingKeysV2;
+    // By default every lease of a node advertises the node's identity (see
+    // Node::identity()), so members of different groups, or of one group over
+    // time, can recognise the same node. When true, this lease uses signing and
+    // recipient keys generated for it alone and never reused. The signaling
+    // inbox key is stable for a lease's lifetime in either case.
+    bool fresh_identity = false;
 };
 
 struct AnnounceHandlers {

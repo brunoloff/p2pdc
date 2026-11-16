@@ -54,13 +54,17 @@ void Node::State::close_watches() {
 }
 
 #ifdef P2PDC_HAVE_DISCOVERY
-std::optional<detail::AnnouncementEndpoint> Node::State::endpoint_for_lease() {
-    if (!endpoint) {
+std::optional<detail::AnnouncementEndpoint> Node::State::endpoint_for_lease(bool fresh) {
+    if (fresh || !endpoint) {
         auto identity = detail::make_endpoint_identity();
         if (std::holds_alternative<CryptoError>(identity)) {
             return std::nullopt;
         }
-        endpoint = std::get<std::shared_ptr<const detail::EndpointIdentity>>(std::move(identity));
+        auto generated =
+            std::get<std::shared_ptr<const detail::EndpointIdentity>>(std::move(identity));
+        if (fresh)
+            return detail::make_announcement_endpoint(std::move(generated));
+        endpoint = std::move(generated);
     }
     return detail::make_announcement_endpoint(endpoint);
 }
@@ -287,7 +291,7 @@ AnnounceResult Node::announce(DiscoveryCapability capability, Scheduler schedule
                                           options.protocol))
         return AnnouncementError::ResourceLimit;
     auto lease = std::unique_ptr<Lease>(new Lease({}));
-    auto endpoint = state->endpoint_for_lease();
+    auto endpoint = state->endpoint_for_lease(options.fresh_identity);
     if (!endpoint) {
         return AnnouncementError::Crypto;
     }
