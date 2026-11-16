@@ -24,6 +24,7 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
     HandshakeGateCallbacks callbacks;
     std::function<void()> before_control_verify;
     std::optional<Bytes> pending;
+    std::size_t transport_limit = 0;
     bool transport_ready = false;
     bool hello_sent = false;
     bool confirmation_sent = false;
@@ -104,6 +105,7 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
             }
             if (!stopped && exchange.ready()) {
                 activated = true;
+                transport.limit_receive(transport_limit);
                 callbacks.on_ready(*exchange.message_limit());
             }
         } catch (const std::bad_alloc &) {
@@ -182,6 +184,8 @@ HandshakeGate::HandshakeGate(const Identity &identity, HandshakeContext context,
     }
     impl_ = std::make_shared<Impl>(identity, std::move(context), role, receive_limit, transport,
                                    std::move(callbacks), std::move(before_control_verify));
+    impl_->transport_limit = transport_message_limit;
+    transport.limit_receive(1 + handshake_record_size);
 }
 HandshakeGate::~HandshakeGate() { close(); }
 ChannelSend HandshakeGate::send(ByteView message) { return impl_->send(message); }

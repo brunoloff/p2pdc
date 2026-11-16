@@ -39,6 +39,8 @@ class ReliableChannel {
     ReliableChannel &operator=(const ReliableChannel &) = delete;
     [[nodiscard]] ChannelSend send(ByteView message);
     void set_ready(bool ready);
+    // See ReliableReceiver::set_message_limit.
+    void set_receive_limit(std::size_t bytes);
     void on_frame(ByteView frame);
     void wake();
     void close();

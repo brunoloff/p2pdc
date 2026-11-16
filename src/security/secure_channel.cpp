@@ -49,6 +49,7 @@ SecureChannel::SecureChannel(const AsyncSignaling &signaling, const Identity &id
       transport_(channel_) {
     if (role != HandshakeRole::Offerer && role != HandshakeRole::Answerer)
         throw std::invalid_argument("invalid handshake role");
+    channel_.set_receive_limit(1 + handshake_record_size);
 }
 SecureChannel::~SecureChannel() { close(); }
 

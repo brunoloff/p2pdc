@@ -32,6 +32,7 @@ struct Transport final : HandshakeTransport {
         sent.emplace_back(bytes.begin(), bytes.end());
         return ChannelSend::Accepted;
     }
+    void limit_receive(std::size_t) override {}
     void close() override { closed = true; }
 };
 struct Pair {

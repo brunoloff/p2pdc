@@ -44,6 +44,7 @@ struct NativeAttempt::Impl : HandshakeTransport, std::enable_shared_from_this<Im
     void cancel_remote() noexcept;
     void stop();
     [[nodiscard]] ChannelSend send(ByteView value) override { return link->send(value); }
+    void limit_receive(std::size_t bytes) override { link->set_receive_limit(bytes); }
     void close() override { link->close(); }
 };
 

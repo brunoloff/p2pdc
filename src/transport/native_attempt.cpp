@@ -250,6 +250,8 @@ std::optional<StoreError> NativeAttempt::Impl::setup() {
     link = std::make_unique<NativeReliableLink>(std::move(ice.rtc), ice.policy,
                                                 config.channel_limits, config.budget,
                                                 config.receive_limits, executor, link_callbacks());
+    // Until the handshake gate exists and completes, only control records may arrive.
+    link->set_receive_limit(1 + handshake_record_size);
     auto result =
         NativeSignalPipe::create(config.store, config.local_mailbox, config.remote_mailbox,
                                  config.budget, config.pipe_limits, executor, pipe_callbacks());

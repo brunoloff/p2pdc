@@ -26,6 +26,7 @@ struct NativeReliableLink::Impl : ReliableSink, std::enable_shared_from_this<Imp
     MemoryBudget budget;
     std::unique_ptr<NativeTransport> transport;
     std::unique_ptr<ReliableChannel> channel;
+    std::optional<std::size_t> receive_limit;
     NativeTransportState status = NativeTransportState::Connecting;
     bool stopped = false;
     bool owner_alive = true;
@@ -113,6 +114,8 @@ struct NativeReliableLink::Impl : ReliableSink, std::enable_shared_from_this<Imp
             try {
                 channel = std::make_unique<ReliableChannel>(limits, budget, *this, executor,
                                                             channel_callbacks());
+                if (receive_limit)
+                    channel->set_receive_limit(*receive_limit);
             } catch (const std::exception &error) {
                 fail(std::string("Cannot configure negotiated frame size: ") + error.what());
                 return false;
@@ -229,6 +232,10 @@ void NativeReliableLink::add_remote_candidate(rtc::Candidate value) {
     impl_->transport->add_remote_candidate(std::move(value));
 }
 ChannelSend NativeReliableLink::send(ByteView message) { return impl_->channel->send(message); }
+void NativeReliableLink::set_receive_limit(std::size_t bytes) {
+    impl_->receive_limit = bytes;
+    impl_->channel->set_receive_limit(bytes);
+}
 NativeTransportState NativeReliableLink::state() const { return impl_->status; }
 RouteInfo NativeReliableLink::poll_route() { return impl_->transport->poll_route(); }
 void NativeReliableLink::wake() { impl_->channel->wake(); }

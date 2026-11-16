@@ -59,6 +59,7 @@ class Loop {
 struct GateTransport : HandshakeTransport {
     NativeReliableLink *link = nullptr;
     ChannelSend send(ByteView message) override { return link->send(message); }
+    void limit_receive(std::size_t bytes) override { link->set_receive_limit(bytes); }
     void close() override { link->close(); }
 };
 

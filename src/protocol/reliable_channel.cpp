@@ -158,6 +158,10 @@ void ReliableChannel::set_ready(bool ready) {
         impl_->schedule();
     }
 }
+void ReliableChannel::set_receive_limit(std::size_t bytes) {
+    impl_->receiver.set_message_limit(bytes);
+}
+
 void ReliableChannel::on_frame(ByteView frame) {
     auto keep_alive = impl_;
     keep_alive->receive(frame);

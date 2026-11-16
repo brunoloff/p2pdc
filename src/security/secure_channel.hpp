@@ -42,6 +42,7 @@ class SecureChannel final {
       public:
         explicit Transport(ReliableChannel &channel) : channel_(channel) {}
         ChannelSend send(ByteView message) override { return channel_.send(message); }
+        void limit_receive(std::size_t bytes) override { channel_.set_receive_limit(bytes); }
         void close() override { channel_.close(); }
 
       private:

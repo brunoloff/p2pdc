@@ -11,6 +11,10 @@ class HandshakeTransport {
   public:
     virtual ~HandshakeTransport() = default;
     [[nodiscard]] virtual ChannelSend send(ByteView message) = 0;
+    // Caps the size of messages the transport will start receiving. The gate
+    // sets it to one control record until the handshake completes, then to the
+    // transport message limit.
+    virtual void limit_receive(std::size_t bytes) = 0;
     virtual void close() = 0;
 };
 

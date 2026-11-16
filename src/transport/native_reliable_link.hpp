@@ -36,6 +36,8 @@ class NativeReliableLink {
     void set_remote_description(rtc::Description description);
     void add_remote_candidate(rtc::Candidate candidate);
     [[nodiscard]] ChannelSend send(ByteView message);
+    // See ReliableChannel::set_receive_limit; kept across channel reconfiguration.
+    void set_receive_limit(std::size_t bytes);
     [[nodiscard]] NativeTransportState state() const;
     [[nodiscard]] RouteInfo poll_route();
     void wake();

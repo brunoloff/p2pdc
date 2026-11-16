@@ -12,6 +12,7 @@ struct Transport : HandshakeTransport {
     bool blocked = false;
     bool closed = false;
     std::vector<Bytes> sent;
+    std::vector<std::size_t> limits;
     ChannelSend send(ByteView bytes) override {
         if (closed) {
             return ChannelSend::Closed;
@@ -22,6 +23,7 @@ struct Transport : HandshakeTransport {
         sent.emplace_back(bytes.begin(), bytes.end());
         return ChannelSend::Accepted;
     }
+    void limit_receive(std::size_t bytes) override { limits.push_back(bytes); }
     void close() override { closed = true; }
 };
 
@@ -81,6 +83,8 @@ TEST(HandshakeGate, WithholdsDataUntilBothConfirmAndNegotiatesLimits) {
     EXPECT_TRUE(pair.ga->ready());
     EXPECT_TRUE(pair.gb->ready());
     EXPECT_EQ(pair.ready_count, 2);
+    EXPECT_EQ(pair.left.limits, (std::vector<std::size_t>{1 + handshake_record_size, 200}));
+    EXPECT_EQ(pair.right.limits, (std::vector<std::size_t>{1 + handshake_record_size, 200}));
     EXPECT_EQ(pair.ga->send(Bytes(81)), ChannelSend::TooLarge);
     EXPECT_EQ(pair.ga->send(Bytes{std::byte{0}, std::byte{255}}), ChannelSend::Accepted);
     pair.deliver();

@@ -28,6 +28,11 @@ class ReliableReceiver {
   public:
     ReliableReceiver(FrameLimits limits, MemoryBudget budget);
     [[nodiscard]] ReceiveResult push(ByteView frame);
+    // Caps the size of the next messages to start (at most the frame limit).
+    // A message announcing a larger total size fails with ResourceLimit before
+    // any memory is reserved, so an unauthenticated peer cannot make the
+    // receiver reserve a full-size message during the handshake.
+    void set_message_limit(std::size_t bytes);
     void reset();
 
   private:
@@ -39,6 +44,7 @@ class ReliableReceiver {
     Reassembler reassembler_;
     std::optional<MemoryReservation> reservation_;
     std::optional<MemoryReservation> extra_;
+    std::size_t message_limit_;
 };
 
 } // namespace p2pdc::detail

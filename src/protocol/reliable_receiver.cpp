@@ -1,5 +1,6 @@
 #include "reliable_receiver.hpp"
 
+#include <algorithm>
 #include <new>
 #include <stdexcept>
 #include <utility>
@@ -7,7 +8,12 @@
 namespace p2pdc::detail {
 
 ReliableReceiver::ReliableReceiver(FrameLimits limits, MemoryBudget budget)
-    : limits_(limits), budget_(std::move(budget)), reassembler_(limits) {}
+    : limits_(limits), budget_(std::move(budget)), reassembler_(limits),
+      message_limit_(limits.max_message_size) {}
+
+void ReliableReceiver::set_message_limit(std::size_t bytes) {
+    message_limit_ = std::min<std::size_t>(bytes, limits_.max_message_size);
+}
 
 void ReliableReceiver::reset() {
     reassembler_.reset();
@@ -38,6 +44,9 @@ ReceiveResult ReliableReceiver::push_validated(ByteView bytes, const FrameView &
     if (!reservation_) {
         if (frame.offset != 0) {
             return fail(ReceiveError::InvalidFrame, FrameError::UnexpectedFrame);
+        }
+        if (frame.total_size > message_limit_) {
+            return fail(ReceiveError::ResourceLimit);
         }
         reservation_ = budget_.try_reserve(frame.total_size);
         if (!reservation_) {

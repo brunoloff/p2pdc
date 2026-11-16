@@ -80,3 +80,20 @@ TEST(ReliableReceiver, RetainedMessageBlocksAnotherUntilReleased) {
         EXPECT_EQ(budget.used(), 0U);
     }
 }
+
+TEST(ReliableReceiver, MessageLimitRejectsLargerMessagesBeforeReserving) {
+    MemoryBudget budget(64);
+    ReliableReceiver receiver({16, 64}, budget);
+    receiver.set_message_limit(3);
+    auto rejected = receiver.push(frame(1, 10, 0, {std::byte{1}}));
+    ASSERT_TRUE(rejected.error);
+    EXPECT_EQ(*rejected.error, ReceiveError::ResourceLimit);
+    EXPECT_EQ(budget.used(), 0U);
+    auto small = receiver.push(frame(2, 2, 0, {std::byte{1}, std::byte{2}}));
+    ASSERT_TRUE(small.message);
+    small.message.reset();
+    receiver.set_message_limit(1000);
+    auto restored = receiver.push(frame(3, 10, 0, {std::byte{1}}));
+    EXPECT_FALSE(restored.error);
+    EXPECT_GE(budget.used(), 10U);
+}
