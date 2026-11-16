@@ -245,8 +245,11 @@ ConnectResult Node::accept_request(IncomingListener &listener,
                                        std::move(handlers), std::move(valid));
     connection->state_ = backend;
     state->connections.emplace_back(backend);
-    if (auto error = start_accepted(*backend, *admission, std::move(ice), pending->offer))
+    if (auto error = start_accepted(*backend, *admission, std::move(ice), pending->offer)) {
+        // The request was consumed; tell the initiator instead of letting it time out.
+        listener.state_->reject_taken(*pending);
         return *error;
+    }
     state->collisions.remember(*admission, detail::ConnectionDirection::Incoming, backend);
     for (auto &other : opposing)
         other->supersede();

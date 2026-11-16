@@ -12,6 +12,8 @@ struct PendingIncoming {
     std::weak_ptr<DiscoveryBackend> subscription;
     SigningPublicKey signing_key;
     RecipientBoxPublicKey box_key;
+    // Kept so a taken request can still be rejected after the listener released it.
+    std::shared_ptr<const Bytes> capability;
 };
 class IncomingBackend {
   public:
@@ -30,6 +32,9 @@ class IncomingBackend {
     [[nodiscard]] virtual std::optional<PendingIncoming>
     take_request(std::optional<std::uint64_t> id) = 0;
     virtual void reject_request(std::optional<std::uint64_t> id) = 0;
+    // Best-effort rejection of a request already removed with take_request,
+    // for when local connection setup fails after consent was consumed.
+    virtual void reject_taken(const PendingIncoming &request) = 0;
     [[nodiscard]] virtual std::optional<IncomingError> start() = 0;
 };
 } // namespace p2pdc::detail

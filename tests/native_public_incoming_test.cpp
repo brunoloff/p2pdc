@@ -1,3 +1,4 @@
+#include "../src/discovery/incoming_testing.hpp"
 #include "../src/discovery/native_public_incoming.hpp"
 #include "../src/transport/native_public_connection.hpp"
 #include "native_public_incoming_fixture.hpp"
@@ -152,6 +153,24 @@ TEST_F(NativePublicIncomingTest, ClosingPendingRequestNotifiesDialingPeer) {
     ASSERT_FALSE(connection_errors.empty()) << "rejection was not received promptly";
     EXPECT_EQ(connection_errors.front(), ConnectError::Rejected);
     EXPECT_EQ(sending->state(), ConnectionState::Failed);
+}
+
+TEST_F(NativePublicIncomingTest, RejectingATakenRequestNotifiesDialingPeer) {
+    setup_sides();
+    listen();
+    connect_sender();
+    ASSERT_TRUE(advance([&] { return request.has_value() || !incoming_errors.empty(); }));
+    ASSERT_TRUE(request);
+    auto &backend = IncomingTestingAccess::backend(*incoming);
+    auto taken = backend.take_request(std::nullopt);
+    ASSERT_TRUE(taken);
+    backend.reject_taken(*taken);
+    const auto deadline = std::chrono::steady_clock::now() + 5s;
+    ASSERT_TRUE(advance([&] {
+        return !connection_errors.empty() || std::chrono::steady_clock::now() >= deadline;
+    }));
+    ASSERT_FALSE(connection_errors.empty()) << "rejection was not received promptly";
+    EXPECT_EQ(connection_errors.front(), ConnectError::Rejected);
 }
 
 TEST_F(NativePublicIncomingTest, UnknownOfferOverflowDoesNotFailTheListener) {

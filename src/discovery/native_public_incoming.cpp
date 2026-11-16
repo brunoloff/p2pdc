@@ -103,6 +103,9 @@ void PublicIncoming::clear_pending() {
         (void)offers_.take(*pending_id_);
     pending_id_.reset();
 }
+void PublicIncoming::reject_taken(const PendingIncoming &request) {
+    send_reject(request.offer, request.endpoint, request.capability);
+}
 void PublicIncoming::reject_pending(IncomingRequestId id) noexcept {
     if (const auto *entry = offers_.find(id))
         reject_offer(entry->offer);
@@ -132,8 +135,8 @@ std::optional<PendingIncoming> PublicIncoming::peek() const {
     if (state() != IncomingState::Pending || !entry ||
         std::chrono::steady_clock::now() >= entry->deadline)
         return std::nullopt;
-    return PendingIncoming{
-        entry->offer, initial_.local.endpoint, lease_, subscription_, signing_key_, box_key_};
+    return PendingIncoming{entry->offer,  initial_.local.endpoint, lease_, subscription_,
+                           signing_key_,  box_key_, initial_.local.capability};
 }
 
 std::optional<PendingIncoming> PublicIncoming::take() {
@@ -151,7 +154,8 @@ std::optional<PendingIncoming> PublicIncoming::take() {
                            lease_,
                            subscription_,
                            signing_key_,
-                           box_key_};
+                           box_key_,
+                           initial_.local.capability};
     state_ = IncomingState::Accepted;
     cleanup();
     return result;
@@ -164,8 +168,8 @@ std::optional<PendingIncoming> PublicIncoming::peek_request(std::optional<std::u
     if (state() != IncomingState::Listening || !entry ||
         std::chrono::steady_clock::now() >= entry->deadline)
         return std::nullopt;
-    return PendingIncoming{
-        entry->offer, initial_.local.endpoint, lease_, subscription_, signing_key_, box_key_};
+    return PendingIncoming{entry->offer,  initial_.local.endpoint, lease_, subscription_,
+                           signing_key_,  box_key_, initial_.local.capability};
 }
 std::optional<PendingIncoming> PublicIncoming::take_request(std::optional<std::uint64_t> id) {
     if (!options_.persistent)
@@ -178,7 +182,8 @@ std::optional<PendingIncoming> PublicIncoming::take_request(std::optional<std::u
                            lease_,
                            subscription_,
                            signing_key_,
-                           box_key_};
+                           box_key_,
+                           initial_.local.capability};
 }
 void PublicIncoming::reject_request(std::optional<std::uint64_t> id) {
     if (options_.persistent && id && peek_request(id)) {

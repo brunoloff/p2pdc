@@ -12,6 +12,7 @@
 namespace p2pdc {
 namespace detail {
 class IncomingBackend;
+struct IncomingTestingAccess;
 }
 enum class IncomingError {
     NotReady,
@@ -54,6 +55,10 @@ struct IncomingHandlers {
 // state() because scheduler submission failure may prevent an error callback.
 // Persistent mode stays Listening while requests are pending. At capacity it
 // rejects new offers best-effort and can report a coalesced on_overflow event.
+// A single-shot listener holding a pending request ignores further offers,
+// whose initiators then wait for their timeout; use persistent mode when
+// several peers may dial at once. If accepting fails after the request was
+// consumed, the initiator is sent a best-effort rejection.
 // When the per-lease replay history (32 recent offers) or the table of offers
 // from not-yet-discovered peers is full, new offers are dropped and the
 // listener stays open; replay entries are never evicted early. Local failures
@@ -75,6 +80,7 @@ class IncomingListener {
 
   private:
     friend class Node;
+    friend struct detail::IncomingTestingAccess;
     explicit IncomingListener(std::shared_ptr<detail::IncomingBackend> state);
     std::shared_ptr<detail::IncomingBackend> state_;
 };

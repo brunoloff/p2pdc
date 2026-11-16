@@ -28,6 +28,7 @@ class PublicIncoming final : public IncomingBackend,
     [[nodiscard]] std::optional<PendingIncoming>
     take_request(std::optional<std::uint64_t> id) override;
     void reject_request(std::optional<std::uint64_t> id) override;
+    void reject_taken(const PendingIncoming &request) override;
 
   private:
     void receive(IncomingOffer offer) noexcept;
@@ -37,6 +38,8 @@ class PublicIncoming final : public IncomingBackend,
     void cleanup();
     void reject_pending(IncomingRequestId id) noexcept;
     void reject_offer(const IncomingOffer &offer) noexcept;
+    void send_reject(const IncomingOffer &offer, const AnnouncementEndpoint &local,
+                     const std::shared_ptr<const Bytes> &capability) noexcept;
     void report_overflow();
     void check_cancel(const Bytes &wire) noexcept;
     void lookup_cancel() noexcept;
