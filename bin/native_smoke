@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+exec "$here/.run-example" build-native-smoke/native_smoke build-native-smoke/native_smoke \
+    'cmake --build build-native-smoke --target native_smoke --parallel 1' "$@"

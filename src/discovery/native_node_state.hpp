@@ -70,6 +70,7 @@ struct Node::State {
     MemoryBudget watch_budget{4 * 1024 * 1024};
     std::vector<std::weak_ptr<detail::DiscoveryBackend>> watches;
     std::vector<std::weak_ptr<detail::ConnectionBackend>> connections;
+    std::size_t max_connections = 8;
     detail::CollisionRegistry collisions;
     std::vector<std::weak_ptr<detail::IncomingBackend>> incoming;
     std::vector<detail::IncomingLeaseSlot> incoming_leases;

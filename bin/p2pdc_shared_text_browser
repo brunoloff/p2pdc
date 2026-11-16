@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Serve the WebAssembly editor on loopback and open it in a browser."""
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import sys
+import webbrowser
+
+
+def find_app(root: Path) -> Path | None:
+    for build in ("build-shared-text-qt-wasm", "build-qt-wasm"):
+        app = root / build / "examples/shared-text/p2pdc_shared_text.html"
+        if app.is_file():
+            return app
+    return None
+
+
+def serve(app: Path) -> None:
+    handler = partial(SimpleHTTPRequestHandler, directory=str(app.parent))
+    with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+        url = f"http://127.0.0.1:{server.server_port}/{app.name}"
+        print(f"Shared Text: {url}\nPress Ctrl+C to stop the local server.", flush=True)
+        if not webbrowser.open(url):
+            print("Could not open a browser; open the URL above manually.", flush=True)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print("\nStopped the local server.")
+
+
+def main() -> int:
+    app = find_app(Path(__file__).resolve().parent.parent)
+    if app is None:
+        print("WebAssembly example not found; see examples/shared-text/README.md for build instructions.",
+              file=sys.stderr)
+        return 1
+    serve(app)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

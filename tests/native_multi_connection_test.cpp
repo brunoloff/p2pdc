@@ -3,6 +3,10 @@
 #include <tuple>
 
 namespace {
+struct ListenerGuard {
+    IncomingListener *listener;
+    ~ListenerGuard() { listener->close(); }
+};
 class NativeMultiConnectionTest : public NativePublicIncomingTest {
   protected:
     std::unique_ptr<Connection> second_out;
@@ -22,6 +26,193 @@ class NativeMultiConnectionTest : public NativePublicIncomingTest {
     }
 };
 } // namespace
+
+TEST_F(NativeMultiConnectionTest, ConfigurableCapacityCountsRetainedAttemptsAndReleasesSlots) {
+    max_connections = 1;
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    ASSERT_NO_FATAL_FAILURE(connect_sender());
+    auto dial = [&] {
+        return sender.node->connect(*sender.lease, *sender.watch, *sender.peer, {}, scheduler(), {},
+                                    handlers(sent));
+    };
+    auto full = dial();
+    ASSERT_TRUE(std::holds_alternative<ConnectError>(full));
+    EXPECT_EQ(std::get<ConnectError>(full), ConnectError::ResourceLimit);
+    sending.reset();
+    std::unique_ptr<Connection> reopened;
+    ASSERT_TRUE(advance([&] {
+        auto result = dial();
+        if (auto *connection = std::get_if<std::unique_ptr<Connection>>(&result)) {
+            reopened = std::move(*connection);
+            return true;
+        }
+        EXPECT_EQ(std::get<ConnectError>(result), ConnectError::ResourceLimit);
+        return false;
+    }));
+    EXPECT_TRUE(reopened);
+}
+
+TEST_F(NativeMultiConnectionTest, ConfiguredCapacityCanExceedEight) {
+    max_connections = 10;
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    std::vector<std::unique_ptr<Connection>> connections;
+    for (int i = 0; i < 10; ++i) {
+        auto result = sender.node->connect(*sender.lease, *sender.watch, *sender.peer, {},
+                                           scheduler(), {}, handlers(sent));
+        ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(result));
+        connections.push_back(std::move(std::get<std::unique_ptr<Connection>>(result)));
+    }
+    auto overflow = sender.node->connect(*sender.lease, *sender.watch, *sender.peer, {},
+                                         scheduler(), {}, handlers(sent));
+    ASSERT_TRUE(std::holds_alternative<ConnectError>(overflow));
+    EXPECT_EQ(std::get<ConnectError>(overflow), ConnectError::ResourceLimit);
+}
+
+TEST_F(NativeMultiConnectionTest, IncomingCapacityFailurePreservesPendingRequest) {
+    max_connections = 1;
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    ASSERT_NO_FATAL_FAILURE(listen());
+    auto occupied = receiver.node->connect(*receiver.lease, *receiver.watch, *receiver.peer, {},
+                                           scheduler(), {}, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(occupied));
+    ASSERT_NO_FATAL_FAILURE(connect_sender());
+    ASSERT_TRUE(advance([&] { return request.has_value() || !incoming_errors.empty(); }));
+    ASSERT_TRUE(request);
+    auto attempt = [&] {
+        return receiver.node->accept(*incoming, {}, scheduler(), {}, handlers(received));
+    };
+    auto full = attempt();
+    ASSERT_TRUE(std::holds_alternative<ConnectError>(full));
+    EXPECT_EQ(std::get<ConnectError>(full), ConnectError::ResourceLimit);
+    EXPECT_EQ(incoming->state(), IncomingState::Pending);
+    std::get<std::unique_ptr<Connection>>(occupied).reset();
+    auto accepted = attempt();
+    EXPECT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(accepted));
+}
+
+TEST_F(NativeMultiConnectionTest, RequestSpecificAcceptanceRejectsWrongIdWithoutConsumingOffer) {
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    ASSERT_NO_FATAL_FAILURE(listen());
+    EXPECT_FALSE(incoming->request_id());
+    ASSERT_NO_FATAL_FAILURE(connect_sender());
+    ASSERT_TRUE(advance([&] { return request.has_value() || !incoming_errors.empty(); }));
+    ASSERT_TRUE(request);
+    auto id = incoming->request_id();
+    ASSERT_TRUE(id);
+    auto wrong = receiver.node->accept(*incoming, *id + 1, {}, scheduler(), {}, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<ConnectError>(wrong));
+    EXPECT_EQ(std::get<ConnectError>(wrong), ConnectError::InvalidPeer);
+    EXPECT_EQ(incoming->request_id(), id);
+    auto accepted = receiver.node->accept(*incoming, *id, {}, scheduler(), {}, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(accepted));
+    EXPECT_FALSE(incoming->request_id());
+}
+
+TEST_F(NativeMultiConnectionTest, PersistentListenerHandlesConcurrentRequestsIndependently) {
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    IncomingOptions options;
+    options.persistent = true;
+    options.max_pending_requests = 2;
+    std::vector<IncomingRequestId> ids;
+    IncomingHandlers incoming_handlers;
+    incoming_handlers.on_error = [&](IncomingError error) { incoming_errors.push_back(error); };
+    incoming_handlers.on_request_identified = [&](IncomingRequestId id, Advertisement) {
+        ids.push_back(id);
+    };
+    auto result = receiver.node->listen(*receiver.lease, *receiver.watch, scheduler(), options,
+                                        std::move(incoming_handlers));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<IncomingListener>>(result));
+    incoming = std::move(std::get<std::unique_ptr<IncomingListener>>(result));
+    ListenerGuard guard{incoming.get()};
+    ASSERT_NO_FATAL_FAILURE(connect_sender());
+    auto other = sender.node->connect(*sender.lease, *sender.watch, *sender.peer, {}, scheduler(),
+                                      {}, handlers(sent));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(other));
+    second_out = std::move(std::get<std::unique_ptr<Connection>>(other));
+    ASSERT_TRUE(advance([&] { return ids.size() == 2 || !incoming_errors.empty(); }));
+    ASSERT_TRUE(incoming_errors.empty());
+    ASSERT_EQ(ids.size(), 2U);
+    EXPECT_NE(ids[0], ids[1]);
+    EXPECT_TRUE(incoming->reject(ids[0]));
+    EXPECT_FALSE(incoming->reject(ids[0]));
+    auto accepted =
+        receiver.node->accept(*incoming, ids[1], {}, scheduler(), {}, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(accepted));
+    receiving = std::move(std::get<std::unique_ptr<Connection>>(accepted));
+    EXPECT_EQ(incoming->state(), IncomingState::Listening);
+}
+
+TEST_F(NativeMultiConnectionTest, PersistentCancellationLeavesOtherRequestPending) {
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    std::vector<IncomingRequestId> ids;
+    std::vector<std::pair<IncomingRequestId, IncomingError>> ended;
+    IncomingOptions options;
+    options.persistent = true;
+    IncomingHandlers callbacks;
+    callbacks.on_error = [&](IncomingError error) { incoming_errors.push_back(error); };
+    callbacks.on_request_identified = [&](IncomingRequestId id, Advertisement) {
+        ids.push_back(id);
+    };
+    callbacks.on_request_ended = [&](IncomingRequestId id, IncomingError error) {
+        ended.emplace_back(id, error);
+    };
+    auto listen_result = receiver.node->listen(*receiver.lease, *receiver.watch, scheduler(),
+                                               options, std::move(callbacks));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<IncomingListener>>(listen_result));
+    incoming = std::move(std::get<std::unique_ptr<IncomingListener>>(listen_result));
+    ListenerGuard guard{incoming.get()};
+    ASSERT_NO_FATAL_FAILURE(connect_sender());
+    auto other = sender.node->connect(*sender.lease, *sender.watch, *sender.peer, {}, scheduler(),
+                                      {}, handlers(sent));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(other));
+    second_out = std::move(std::get<std::unique_ptr<Connection>>(other));
+    ASSERT_TRUE(advance([&] { return ids.size() == 2 || !incoming_errors.empty(); }));
+    ASSERT_EQ(ids.size(), 2U);
+    sending->close();
+    ASSERT_TRUE(advance([&] { return !ended.empty() || !incoming_errors.empty(); }));
+    ASSERT_EQ(ended.size(), 1U);
+    EXPECT_EQ(ended[0].second, IncomingError::Canceled);
+    auto remaining = ids[0] == ended[0].first ? ids[1] : ids[0];
+    auto result =
+        receiver.node->accept(*incoming, remaining, {}, scheduler(), {}, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(result));
+    EXPECT_EQ(incoming->state(), IncomingState::Listening);
+}
+
+TEST_F(NativeMultiConnectionTest, PersistentTimeoutDoesNotStopListener) {
+    ASSERT_NO_FATAL_FAILURE(setup_sides());
+    std::vector<IncomingRequestId> ids;
+    std::vector<std::pair<IncomingRequestId, IncomingError>> ended;
+    IncomingOptions options;
+    options.persistent = true;
+    options.request_timeout = 100ms;
+    IncomingHandlers callbacks;
+    callbacks.on_error = [&](IncomingError error) { incoming_errors.push_back(error); };
+    callbacks.on_request_identified = [&](IncomingRequestId id, Advertisement) {
+        ids.push_back(id);
+    };
+    callbacks.on_request_ended = [&](IncomingRequestId id, IncomingError error) {
+        ended.emplace_back(id, error);
+    };
+    auto result = receiver.node->listen(*receiver.lease, *receiver.watch, scheduler(), options,
+                                        std::move(callbacks));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<IncomingListener>>(result));
+    incoming = std::move(std::get<std::unique_ptr<IncomingListener>>(result));
+    ListenerGuard guard{incoming.get()};
+    ASSERT_NO_FATAL_FAILURE(connect_sender());
+    ASSERT_TRUE(advance([&] { return !ended.empty() || !incoming_errors.empty(); }));
+    ASSERT_EQ(ids.size(), 1U);
+    ASSERT_EQ(ended.size(), 1U);
+    EXPECT_EQ(ended[0], std::make_pair(ids[0], IncomingError::Timeout));
+    EXPECT_FALSE(incoming->reject(ids[0]));
+    EXPECT_EQ(incoming->state(), IncomingState::Listening);
+    auto next = sender.node->connect(*sender.lease, *sender.watch, *sender.peer, {}, scheduler(),
+                                     {}, handlers(sent));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(next));
+    second_out = std::move(std::get<std::unique_ptr<Connection>>(next));
+    ASSERT_TRUE(advance([&] { return ids.size() == 2 || !incoming_errors.empty(); }));
+    EXPECT_EQ(ids.size(), 2U);
+}
 
 TEST_F(NativeMultiConnectionTest, SimultaneousAttemptsShareLeasesWithoutLosingOffers) {
     ASSERT_NO_FATAL_FAILURE(begin_two_attempts());

@@ -27,9 +27,10 @@ bool valid_context(detail::AdmissionContext context,
            value->local.fields.signaling_inbox == endpoint.fields.signaling_inbox;
 }
 
-bool available(std::vector<std::weak_ptr<detail::ConnectionBackend>> &connections) {
+bool available(std::vector<std::weak_ptr<detail::ConnectionBackend>> &connections,
+               std::size_t limit) {
     std::erase_if(connections, [](const auto &entry) { return entry.expired(); });
-    return connections.size() < 8;
+    return connections.size() < limit;
 }
 std::optional<ConnectError> start_outgoing(detail::ConnectionBackend &backend,
                                            const detail::ConnectionAdmission &admission,
@@ -57,7 +58,7 @@ ConnectResult Node::connect(const Lease &lease, const Subscription &subscription
         return *error == detail::AdmissionError::NodeNotReady ? ConnectError::NotReady
                                                               : ConnectError::InvalidPeer;
     }
-    if (!available(state->connections)) {
+    if (!available(state->connections, state->max_connections)) {
         return ConnectError::ResourceLimit;
     }
     auto admission = std::get<detail::ConnectionAdmission>(std::move(resolved));

@@ -1,5 +1,6 @@
 #include "node_race_consumer.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -14,6 +15,7 @@ struct Side {
     std::unique_ptr<Subscription> watch;
     std::unique_ptr<IncomingListener> listener;
     std::unique_ptr<Connection> outgoing, incoming;
+    std::unique_ptr<Connection> extra_outgoing;
     std::optional<Advertisement> peer;
     bool published = false, caught = false, request = false;
 };
@@ -32,6 +34,7 @@ class Race : public std::enable_shared_from_this<Race> {
     bool listen(unsigned index);
     bool dial(unsigned index);
     void request(unsigned index, Advertisement peer);
+    void persistent_request(IncomingRequestId id, Advertisement peer);
     void incoming_error(IncomingError error);
     void connection_error(ConnectError error);
     ConnectionHandlers handlers();
@@ -48,6 +51,7 @@ class Race : public std::enable_shared_from_this<Race> {
     DiscoveryCapability capability_{};
     bool starting_ = false, resolved_ = false, sent_ = false, finishing_ = false, success_ = false;
     unsigned accepted_side_ = 0, stopped_ = 0;
+    std::vector<IncomingRequestId> requests_;
 };
 
 Race::Race(DiscoveryConfig config, Executor executor, Scheduler scheduler, RaceMode mode,
@@ -140,26 +144,76 @@ void Race::discover() {
             return;
     starting_ = true;
     if (!listen(1) || (mode_ == RaceMode::Collision && !listen(0)) || !dial(0) ||
-        (mode_ == RaceMode::Collision && !dial(1)))
+        (mode_ == RaceMode::Collision && !dial(1))) {
         finish(false);
+        return;
+    }
+    if (mode_ == RaceMode::Persistent) {
+        auto &side = sides_[0];
+        auto result = side.node->connect(*side.lease, *side.watch, *side.peer, {}, scheduler_, {},
+                                         handlers());
+        auto *connection = std::get_if<std::unique_ptr<Connection>>(&result);
+        if (!connection) {
+            finish(false);
+            return;
+        }
+        side.extra_outgoing = std::move(*connection);
+    }
 }
 bool Race::listen(unsigned index) {
     auto weak = weak_from_this();
     auto &side = sides_[index];
-    auto result = side.node->listen(*side.lease, *side.watch, scheduler_, {},
-                                    {[weak, index](Advertisement peer) {
-                                         if (auto self = weak.lock())
-                                             self->request(index, std::move(peer));
-                                     },
-                                     [weak](IncomingError error) {
-                                         if (auto self = weak.lock())
-                                             self->incoming_error(error);
-                                     }});
+    IncomingOptions options;
+    options.persistent = mode_ == RaceMode::Persistent;
+    IncomingHandlers callbacks{[weak, index](Advertisement peer) {
+                                   if (auto self = weak.lock())
+                                       self->request(index, std::move(peer));
+                               },
+                               [weak](IncomingError error) {
+                                   if (auto self = weak.lock())
+                                       self->incoming_error(error);
+                               }};
+    callbacks.on_request_identified = [weak](IncomingRequestId id, Advertisement peer) {
+        if (auto self = weak.lock())
+            self->persistent_request(id, std::move(peer));
+    };
+    auto result =
+        side.node->listen(*side.lease, *side.watch, scheduler_, options, std::move(callbacks));
     auto *handle = std::get_if<std::unique_ptr<IncomingListener>>(&result);
     if (!handle)
         return false;
     side.listener = std::move(*handle);
     return true;
+}
+void Race::persistent_request(IncomingRequestId id, Advertisement peer) {
+    if (finishing_ || !sides_[1].peer || peer != *sides_[1].peer) {
+        finish(false);
+        return;
+    }
+    requests_.push_back(id);
+    if (requests_.size() != 2)
+        return;
+    auto &side = sides_[1];
+    auto invalid = side.node->accept(*side.listener, std::max(requests_[0], requests_[1]) + 1, {},
+                                     scheduler_, {}, handlers());
+    if (!std::holds_alternative<ConnectError>(invalid) ||
+        std::get<ConnectError>(invalid) != ConnectError::InvalidPeer) {
+        finish(false);
+        return;
+    }
+    if (!side.listener->reject(requests_[0])) {
+        finish(false);
+        return;
+    }
+    auto result = side.node->accept(*side.listener, requests_[1], {}, scheduler_, {}, handlers());
+    auto *connection = std::get_if<std::unique_ptr<Connection>>(&result);
+    if (!connection || side.listener->state() != IncomingState::Listening) {
+        finish(false);
+        return;
+    }
+    side.incoming = std::move(*connection);
+    accepted_side_ = 1;
+    check_connection();
 }
 bool Race::dial(unsigned index) {
     auto &side = sides_[index];
@@ -225,6 +279,8 @@ void Race::incoming_error(IncomingError error) {
 void Race::connection_error(ConnectError error) {
     if (finishing_)
         return;
+    if (mode_ == RaceMode::Persistent && error == ConnectError::Rejected)
+        return;
     if ((mode_ == RaceMode::Reject && error == ConnectError::Rejected) ||
         (mode_ == RaceMode::CancelAccepted && error == ConnectError::Canceled))
         finish(true);
@@ -262,8 +318,12 @@ void Race::check_connection() {
     if (finishing_ || sent_)
         return;
     auto &incoming = sides_[accepted_side_].incoming;
-    auto &outgoing = sides_[1 - accepted_side_].outgoing;
-    if (incoming->state() == ConnectionState::Ready &&
+    auto &source = sides_[1 - accepted_side_];
+    auto *outgoing = source.outgoing.get();
+    if (mode_ == RaceMode::Persistent && source.extra_outgoing &&
+        source.extra_outgoing->state() == ConnectionState::Ready)
+        outgoing = source.extra_outgoing.get();
+    if (incoming->state() == ConnectionState::Ready && outgoing &&
         outgoing->state() == ConnectionState::Ready) {
         sent_ = true;
         if (outgoing->send(Bytes{std::byte{42}}) != SendStatus::Accepted)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -42,6 +43,9 @@ struct DiscoveryConfig {
     // Browser-accessible OpenDHT proxy endpoints. Currently supply exactly one. URLs
     // require HTTPS, except an HTTP loopback endpoint may be used for testing.
     std::vector<std::string> browser_proxy_urls;
+    // Maximum retained connection handles per node, including pending attempts.
+    // Shared by all capabilities. Valid range: 1 through 1024.
+    std::size_t max_connections = 8;
 };
 
 // Source compatibility with the earlier native-only interface.

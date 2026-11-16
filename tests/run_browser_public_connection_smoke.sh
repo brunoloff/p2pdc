@@ -3,8 +3,8 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 mode=${1:-direct}
 browser=${P2PDC_TEST_BROWSER:-chromium}
-if [[ $# -gt 1 || ( "$mode" != direct && "$mode" != unsupported && "$mode" != broken-transport && "$mode" != accept-unsupported && "$mode" != accept-broken-transport && "$mode" != turn && "$mode" != fallback && "$mode" != echo && "$mode" != echo-reject && "$mode" != echo-turn && "$mode" != echo-fallback && "$mode" != collision && "$mode" != cancel && "$mode" != reject && "$mode" != cancel-accepted && "$mode" != tls && "$mode" != tls-untrusted && "$mode" != tls-name && "$mode" != tls-timed && "$mode" != tls-expired ) ]]; then
-    printf 'Usage: %s [direct|unsupported|broken-transport|accept-unsupported|accept-broken-transport|turn|fallback|echo|echo-reject|echo-turn|echo-fallback|collision|cancel|reject|cancel-accepted|tls|tls-untrusted|tls-name|tls-timed|tls-expired]\n' "$0" >&2
+if [[ $# -gt 1 || ( "$mode" != direct && "$mode" != unsupported && "$mode" != broken-transport && "$mode" != accept-unsupported && "$mode" != accept-broken-transport && "$mode" != turn && "$mode" != fallback && "$mode" != echo && "$mode" != echo-reject && "$mode" != echo-turn && "$mode" != echo-fallback && "$mode" != collision && "$mode" != cancel && "$mode" != reject && "$mode" != cancel-accepted && "$mode" != persistent && "$mode" != tls && "$mode" != tls-untrusted && "$mode" != tls-name && "$mode" != tls-timed && "$mode" != tls-expired ) ]]; then
+    printf 'Usage: %s [direct|unsupported|broken-transport|accept-unsupported|accept-broken-transport|turn|fallback|echo|echo-reject|echo-turn|echo-fallback|collision|cancel|reject|cancel-accepted|persistent|tls|tls-untrusted|tls-name|tls-timed|tls-expired]\n' "$0" >&2
     exit 1
 fi
 if [[ "$browser" != chromium && "$browser" != firefox && "$browser" != webkit ]]; then
@@ -174,7 +174,7 @@ if [[ "$mode" == echo-turn ]]; then page="$page?example=echo&turn=required"; fi
 if [[ "$mode" == echo-fallback ]]; then page="$page?example=echo&turn=fallback"; fi
 if [[ "$mode" == tls || "$mode" == tls-untrusted || "$mode" == tls-name ]]; then page="$page?turn=tls"; fi
 if [[ "$mode" == tls-timed || "$mode" == tls-expired ]]; then page="$page?turn=$mode"; fi
-if [[ "$mode" == collision || "$mode" == cancel || "$mode" == reject || "$mode" == cancel-accepted ]]; then page="$page?race=$mode"; fi
+if [[ "$mode" == collision || "$mode" == cancel || "$mode" == reject || "$mode" == cancel-accepted || "$mode" == persistent ]]; then page="$page?race=$mode"; fi
 if [[ "$tls_mode" == 1 ]]; then
     args=(--timeout 35 --profile "$test_dir/firefox-profile" --engine "$browser")
     if [[ "$mode" == tls-untrusted || "$mode" == tls-name || "$mode" == tls-expired ]]; then args+=(--expect-failure); fi

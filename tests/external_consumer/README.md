@@ -11,13 +11,13 @@ the main README and building an Emscripten-targeted libsodium:
 
 ```sh
 cmake -S tests/external_consumer -B build-external-native -G Ninja \
-  -DBUILD_TESTING=OFF -DP2PDC_SOURCE_DIR="$PWD" \
+  -DBUILD_TESTING=OFF -DP2PDC_BUILD_SHARED_TEXT=OFF -DP2PDC_SOURCE_DIR="$PWD" \
   -DLibDataChannel_DIR="$PWD/.deps/install/lib/cmake/LibDataChannel"
 cmake --build build-external-native --target external_consumer --parallel 1
 
 cmake -S tests/external_consumer -B build-external-wasm -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$EMSCRIPTEN_TOOLCHAIN_FILE" \
-  -DBUILD_TESTING=OFF -DP2PDC_SOURCE_DIR="$PWD" \
+  -DBUILD_TESTING=OFF -DP2PDC_BUILD_SHARED_TEXT=OFF -DP2PDC_SOURCE_DIR="$PWD" \
   -DSODIUM_INCLUDE_DIR="$P2PDC_WASM_SODIUM/include" \
   -DSODIUM_LIBRARY="$P2PDC_WASM_SODIUM/lib/libsodium.a"
 cmake --build build-external-wasm --target external_consumer --parallel 1

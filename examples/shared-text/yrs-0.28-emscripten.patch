@@ -1,0 +1,20 @@
+--- a/yrs/src/undo.rs
++++ b/yrs/src/undo.rs
+@@ -799,7 +799,7 @@
+ 
+ pub type CaptureTransactionFn = Arc<dyn Fn(&TransactionMut) -> bool + Send + Sync + 'static>;
+ 
+-#[cfg(not(target_family = "wasm"))]
++#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+ impl<M> Default for Options<M> {
+     fn default() -> Self {
+         Options {
+--- a/yffi/Cargo.toml
++++ b/yffi/Cargo.toml
+@@ -16,5 +16,5 @@
+ serde_json = { version = "1.0" }
+ 
+ [lib]
+-crate-type = ["staticlib", "cdylib"]
++crate-type = ["staticlib"]
+ name = "yrs"

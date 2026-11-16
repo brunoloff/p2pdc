@@ -335,11 +335,24 @@ disposable signing key with Linux, checks invalid-seed rejection, and removes
 the directory. It reports cleanup failure. The optional
 `--webrtc` mode additionally runs the native backend's in-process data-channel
 echo. `--pair` runs the public C++ two-node connection test with local DHT
-bootstrap. `--races` runs simultaneous dialing, cancellation, rejection, and cancellation
-after acceptance between two peers on the phone. These modes require a usable
+bootstrap. `--races` runs simultaneous dialing, cancellation, rejection, cancellation
+after acceptance, and concurrent requests on a persistent listener between two
+peers on the phone. These modes require a usable
 phone network interface and do not exercise a connection to another device.
 The harness itself can be checked without a device using
 `bash tests/android_device_smoke_test.sh`.
+
+On 2026-11-16, a freshly rebuilt arm64 test payload passed the consumer,
+identity, local WebRTC echo, public node pair, and all five race scenarios on
+a Pixel 6a running API level 37. The persistent-listener case checks two
+concurrent requests; it is not a multi-device or application-lifecycle test.
+The rebuilt phone and Linux echo peers also exchanged data in both connection
+roles using the public bootstrap and STUN services; both endpoints reported a
+direct host-candidate route. The network topology was not established by this
+run, and TURN was not tested in it.
+Chromium and the phone also exchanged data in both connection roles through
+the public browser discovery proxy. Chromium reported a direct route; the
+phone reported an unknown route for its host/peer-reflexive candidate pair.
 
 The internet echo test is opt-in: it contacts the public Jami OpenDHT network
 and Google STUN, exposing the peers' network addresses to those services. It

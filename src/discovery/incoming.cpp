@@ -10,6 +10,15 @@ IncomingState IncomingListener::state() const {
 std::optional<Advertisement> IncomingListener::peer() const {
     return state_ ? state_->peer() : std::nullopt;
 }
+std::optional<IncomingRequestId> IncomingListener::request_id() const {
+    return state_ ? state_->request_id() : std::nullopt;
+}
+bool IncomingListener::reject(IncomingRequestId request_id) {
+    if (!state_ || !state_->peek_request(request_id))
+        return false;
+    state_->reject_request(request_id);
+    return true;
+}
 void IncomingListener::close() {
     if (state_)
         state_->close();

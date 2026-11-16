@@ -24,8 +24,8 @@ struct IncomingListenerCallbacks {
     // If provided, false prevents consuming additional offers while the owner
     // is unable to present them; a later listener can catch them up from DHT.
     std::function<bool()> can_offer{};
-    // Untrusted records delivered while a request is pending; owner verifies them.
-    std::function<void(Bytes)> on_pending_record{};
+    // All untrusted records, including while offers are being accepted; owner verifies them.
+    std::function<void(const Bytes &)> on_pending_record{};
 };
 
 // Internal owner-executor component. Callbacks and context/clock providers must

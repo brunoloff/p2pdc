@@ -37,9 +37,13 @@ std::unique_ptr<Node> Node::create(DiscoveryConfig config, Executor executor) {
     if (!executor) {
         throw std::invalid_argument("node requires an executor");
     }
+    if (config.max_connections == 0 || config.max_connections > 1024)
+        throw std::invalid_argument("max_connections must be between 1 and 1024");
+    const auto max_connections = config.max_connections;
     auto start_runner = detail::make_native_runner_start(std::move(config));
-    return std::unique_ptr<Node>(
-        new Node(std::make_shared<State>(std::move(executor), std::move(start_runner))));
+    auto state = std::make_shared<State>(std::move(executor), std::move(start_runner));
+    state->max_connections = max_connections;
+    return std::unique_ptr<Node>(new Node(std::move(state)));
 }
 
 void Node::State::launch(std::weak_ptr<State> weak) {

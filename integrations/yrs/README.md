@@ -24,7 +24,7 @@ nice -n 15 ionice -c 3 cargo build --manifest-path .deps/y-crdt/Cargo.toml \
   --package yffi --locked --jobs 1
 
 cmake -S tests/external_consumer -B build-external-native -G Ninja \
-  -DBUILD_TESTING=OFF -DP2PDC_SOURCE_DIR="$PWD" \
+  -DBUILD_TESTING=OFF -DP2PDC_BUILD_SHARED_TEXT=OFF -DP2PDC_SOURCE_DIR="$PWD" \
   -DLibDataChannel_DIR="$PWD/.deps/install/lib/cmake/LibDataChannel" \
   -DP2PDC_YRS_INCLUDE_DIR="$PWD/.deps/y-crdt/tests-ffi/include" \
   -DP2PDC_YRS_LIBRARY="$PWD/.deps/y-crdt-target/debug/libyrs.so"

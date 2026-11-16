@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+primary=$1
+fallback=$2
+instructions=$3
+shift 3
+for relative in "$primary" "$fallback"; do
+    if [ -x "$root/$relative" ]; then
+        exec "$root/$relative" "$@"
+    fi
+done
+printf 'Example executable not found. Build it with: %s\n' "$instructions" >&2
+exit 1

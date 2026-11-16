@@ -124,6 +124,12 @@ TEST(NativeNode, ShutdownBeforeStartAndInvalidArguments) {
     Queue queue;
     EXPECT_THROW(static_cast<void>(Node::create(local_config(), {})), std::invalid_argument);
     auto invalid = local_config();
+    invalid.max_connections = 0;
+    EXPECT_THROW(static_cast<void>(Node::create(invalid, queue.executor())), std::invalid_argument);
+    invalid.max_connections = 1025;
+    EXPECT_THROW(static_cast<void>(Node::create(invalid, queue.executor())), std::invalid_argument);
+    invalid.max_connections = 1;
+    EXPECT_NO_THROW(static_cast<void>(Node::create(invalid, queue.executor())));
     invalid.bootstrap_servers = {{"bad host", 4222}};
     EXPECT_THROW(static_cast<void>(Node::create(invalid, queue.executor())), std::invalid_argument);
     auto node = Node::create(local_config(), queue.executor());

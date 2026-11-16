@@ -1,5 +1,5 @@
-#include "node_discovery_consumer.hpp"
 #include "../src/browser/browser_record_store.hpp"
+#include "node_discovery_consumer.hpp"
 #include "p2pdc/recipient_crypto.h"
 #include "p2pdc/runtime.h"
 
@@ -15,10 +15,19 @@ bool rejects_invalid_configuration(Executor executor) {
             return true;
         }
     };
-    DiscoveryConfig insecure, multiple;
+    DiscoveryConfig insecure, multiple, capacity;
     insecure.browser_proxy_urls = {"http://example.com"};
     multiple.browser_proxy_urls = {"https://one.example", "https://two.example"};
-    return rejects({}) && rejects(std::move(insecure)) && rejects(std::move(multiple));
+    capacity.browser_proxy_urls = {"http://127.0.0.1:49412"};
+    capacity.max_connections = 0;
+    if (!rejects(capacity))
+        return false;
+    capacity.max_connections = 1025;
+    if (!rejects(capacity))
+        return false;
+    capacity.max_connections = 10;
+    auto valid = Node::create(capacity, executor);
+    return valid && rejects({}) && rejects(std::move(insecure)) && rejects(std::move(multiple));
 }
 bool imports_identity(Executor executor) {
     DiscoveryConfig config;

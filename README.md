@@ -22,6 +22,8 @@ See [first alpha status](docs/ALPHA_STATUS.md) for the current validation and
 remaining release work. The original plan and Xournal++ survey are retained as
 [historical references](docs/history/README.md).
 
+For application developers, start with the [public C++ API guide](docs/PUBLIC_API.md).
+
 `p2pdc/ice_config.h` defines backend-independent STUN and TURN server settings
 and automatic or local-relay-required policy. Native connection attempts use
 these settings, including the experimental outgoing `Node::connect` interface.
@@ -124,6 +126,17 @@ pending lookup, with a 16 MiB total reservation limit; excess concurrent
 lookups report `ResourceLimit`. This limit does not cover all browser memory.
 
 ## Native build and tests
+
+Native example launchers are collected in `bin/`: `p2pdc_shared_text`,
+`p2pdc_echo`, and `native_smoke`. The first two prefer `build-native-tls` and
+fall back to `build-native`; the smoke launcher uses `build-native-smoke`. They
+report a build command if their executable is missing.
+`bin/p2pdc_shared_text_browser` serves the WebAssembly editor on loopback and
+opens it in the default browser; press Ctrl+C in that terminal to stop it.
+
+The [shared text editor example](examples/shared-text/README.md) is built by
+default and additionally needs Qt 6 and Yrs. Use
+`-DP2PDC_BUILD_SHARED_TEXT=OFF` to build the library without those dependencies.
 
 The default native build includes the discovery and WebRTC backends. It needs a
 C++20 compiler, CMake, libsodium, OpenDHT, msgpack-cxx, and libdatachannel;

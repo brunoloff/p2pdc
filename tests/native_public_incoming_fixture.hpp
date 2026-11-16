@@ -46,6 +46,7 @@ class NativePublicIncomingTest : public NativeAttemptTest {
     std::optional<Advertisement> request;
     std::unique_ptr<Connection> sending, receiving;
     std::vector<Bytes> sent, received;
+    std::size_t max_connections = 8;
 
     Scheduler scheduler() {
         return [this](auto, auto callback) -> CancelTimer {
@@ -67,6 +68,7 @@ class NativePublicIncomingTest : public NativeAttemptTest {
         config.network_id = 0x12345683;
         config.bind_addresses = NativeBindAddresses{"127.0.0.1", "::1"};
         config.bootstrap_servers = {{"127.0.0.1", first->getBoundPort(AF_INET)}};
+        config.max_connections = max_connections;
         side.node = Node::create(config, loop.executor());
         bool started = false;
         ASSERT_TRUE(side.node->start(

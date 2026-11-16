@@ -66,10 +66,11 @@ bool race(dht::DhtRunner &first, p2pdc_test::RaceMode mode) {
 }
 
 bool races(dht::DhtRunner &first) {
-    const std::array names{"collision", "cancel", "reject", "cancel-accepted"};
+    const std::array names{"collision", "cancel", "reject", "cancel-accepted", "persistent"};
     std::size_t index = 0;
     for (auto mode : {p2pdc_test::RaceMode::Collision, p2pdc_test::RaceMode::Cancel,
-                      p2pdc_test::RaceMode::Reject, p2pdc_test::RaceMode::CancelAccepted}) {
+                      p2pdc_test::RaceMode::Reject, p2pdc_test::RaceMode::CancelAccepted,
+                      p2pdc_test::RaceMode::Persistent}) {
         std::cerr << "Android race: " << names[index++] << '\n';
         if (!race(first, mode))
             return false;

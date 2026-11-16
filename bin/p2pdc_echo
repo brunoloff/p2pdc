@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+exec "$here/.run-example" build-native-tls/p2pdc_echo build-native/p2pdc_echo \
+    'cmake --build build-native --target p2pdc_echo --parallel 1' "$@"

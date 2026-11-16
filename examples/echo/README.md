@@ -33,7 +33,8 @@ real use.
 
 ## Standalone program
 
-Build the same application source for either target:
+Build the same application source for either target (the launcher in `bin/`
+prefers `build-native-tls`, then `build-native`):
 
 ```sh
 cmake --build build-native --target p2pdc_echo --parallel 1
@@ -55,11 +56,11 @@ export P2PDC_ECHO_PEER_KEY='<other peer signing public key, 64-digit hex>'
 export P2PDC_ECHO_BOOTSTRAP_HOST='<OpenDHT bootstrap host>'
 export P2PDC_ECHO_BOOTSTRAP_PORT=4222
 export P2PDC_ECHO_NETWORK=0
-./build-native/p2pdc_echo
+./bin/p2pdc_echo
 ```
 
 To obtain your public signing key before starting, set `P2PDC_ECHO_SEED` and
-run `./build-native/p2pdc_echo --public-key`. Exchange public keys independently
+run `./bin/p2pdc_echo --public-key`. Exchange public keys independently
 and verify them before authorizing a peer. Do not share either private secret.
 The example times out after 60 seconds and exits after the echo and its
 acknowledgement complete. Environment variables and browser page scripts can

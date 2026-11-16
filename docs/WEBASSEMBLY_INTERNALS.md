@@ -232,7 +232,7 @@ On the Manjaro package, add `/usr/lib/emscripten` to `PATH` first if `emcmake`
 is not already available.
 
 ```sh
-emcmake cmake -S . -B build-wasm -G Ninja -DBUILD_TESTING=OFF \
+emcmake cmake -S . -B build-wasm -G Ninja -DBUILD_TESTING=OFF -DP2PDC_BUILD_SHARED_TEXT=OFF \
   -DP2PDC_ENABLE_SODIUM=OFF -DP2PDC_BUILD_BROWSER_RELIABLE=ON
 cmake --build build-wasm --target p2pdc_browser_reliable --parallel 1
 ```
@@ -270,7 +270,7 @@ emconfigure ./configure --host=wasm32-unknown-emscripten \
 emmake make -j 1
 emmake make -j 1 install
 cd ../..
-emcmake cmake -S . -B build-wasm-auth -G Ninja -DBUILD_TESTING=OFF \
+emcmake cmake -S . -B build-wasm-auth -G Ninja -DBUILD_TESTING=OFF -DP2PDC_BUILD_SHARED_TEXT=OFF \
   -DP2PDC_ENABLE_SODIUM=ON -DP2PDC_BUILD_BROWSER_SECURITY_TEST=ON \
   -DSODIUM_INCLUDE_DIR="$PWD/.deps/sodium-wasm/include" \
   -DSODIUM_LIBRARY="$PWD/.deps/sodium-wasm/lib/libsodium.a"

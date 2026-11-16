@@ -14,12 +14,15 @@ Node::State::State(Executor application, std::string url)
 std::unique_ptr<Node> Node::create(DiscoveryConfig config, Executor executor) {
     if (!executor)
         throw std::invalid_argument("node requires an executor");
+    if (config.max_connections == 0 || config.max_connections > 1024)
+        throw std::invalid_argument("max_connections must be between 1 and 1024");
     if (config.browser_proxy_urls.size() != 1)
         throw std::invalid_argument("browser node requires exactly one OpenDHT proxy URL");
     auto url = std::move(config.browser_proxy_urls.front());
     (void)detail::make_browser_record_store(url, {1024, 64, 65536});
-    return std::unique_ptr<Node>(
-        new Node(std::make_shared<State>(std::move(executor), std::move(url))));
+    auto state = std::make_shared<State>(std::move(executor), std::move(url));
+    state->max_connections = config.max_connections;
+    return std::unique_ptr<Node>(new Node(std::move(state)));
 }
 
 void Node::State::launch(std::weak_ptr<State> weak) {

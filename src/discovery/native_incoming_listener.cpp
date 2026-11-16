@@ -134,9 +134,11 @@ void NativeIncomingListener::State::receive(Bytes wire) {
     if (!active || !healthy)
         return;
     try {
+        if (callbacks.on_pending_record)
+            callbacks.on_pending_record(wire);
+        if (!active || !healthy)
+            return;
         if (callbacks.can_offer && !callbacks.can_offer()) {
-            if (callbacks.on_pending_record)
-                callbacks.on_pending_record(std::move(wire));
             return;
         }
         const auto time = now();

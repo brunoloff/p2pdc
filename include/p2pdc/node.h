@@ -84,7 +84,7 @@ class Node {
                                           AnnounceOptions options, AnnounceHandlers handlers);
     // Discovery handles must remain live through initial signaling admission.
     // Once signaling starts, the connection owns its bindings independently.
-    // At most eight connection handles may be retained per node. Multiple
+    // Retained connection handles are limited by DiscoveryConfig::max_connections. Multiple
     // attempts may share a lease; at most one incoming listener per lease may
     // be active. Reopened listeners retain bounded in-memory replay protection.
     // Listeners reopened on a lease require the same discovery lifetime and
@@ -99,11 +99,18 @@ class Node {
     [[nodiscard]] ConnectResult accept(IncomingListener &listener, IceConfig ice,
                                        Scheduler scheduler, ConnectOptions options,
                                        ConnectionHandlers handlers);
+    [[nodiscard]] ConnectResult accept(IncomingListener &listener, IncomingRequestId request_id,
+                                       IceConfig ice, Scheduler scheduler, ConnectOptions options,
+                                       ConnectionHandlers handlers);
 
   private:
     friend struct detail::ConnectionAccess;
     friend struct detail::NodeTestAccess;
     struct State;
+    [[nodiscard]] ConnectResult accept_request(IncomingListener &listener,
+                                               std::optional<std::uint64_t> request_id,
+                                               IceConfig ice, Scheduler scheduler,
+                                               ConnectOptions options, ConnectionHandlers handlers);
     explicit Node(std::shared_ptr<State> state);
     std::shared_ptr<State> state_;
 };

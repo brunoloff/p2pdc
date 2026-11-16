@@ -1,4 +1,4 @@
-#include "native_public_incoming.hpp"
+#include "public_incoming_impl.hpp"
 #include "terminal_signal.hpp"
 
 #include "../core/timer_producer.hpp"
@@ -10,8 +10,7 @@
 #include <utility>
 
 namespace p2pdc::detail {
-namespace {
-std::uint64_t utc_seconds() {
+static std::uint64_t utc_seconds() {
     const auto value = std::chrono::duration_cast<std::chrono::seconds>(
                            std::chrono::system_clock::now().time_since_epoch())
                            .count();
@@ -19,52 +18,6 @@ std::uint64_t utc_seconds() {
         throw std::runtime_error("system clock is before the Unix epoch");
     return static_cast<std::uint64_t>(value);
 }
-
-class PublicIncoming final : public IncomingBackend,
-                             public std::enable_shared_from_this<PublicIncoming> {
-  public:
-    PublicIncoming(RecordStore store, IncomingContext initial,
-                   std::function<std::optional<IncomingContext>()> context,
-                   std::weak_ptr<DiscoveryBackend> lease,
-                   std::weak_ptr<DiscoveryBackend> subscription, Executor executor,
-                   CallbackGate gate, Scheduler scheduler, IncomingOptions options,
-                   IncomingHandlers handlers, std::shared_ptr<IncomingOfferReplay> replay);
-    void initialize();
-    [[nodiscard]] std::optional<IncomingError> start() override;
-    void close() override;
-    [[nodiscard]] IncomingState state() const override;
-    [[nodiscard]] bool signaling_closed() const override;
-    [[nodiscard]] std::optional<Advertisement> peer() const override;
-    [[nodiscard]] std::optional<PendingIncoming> peek() const override;
-    [[nodiscard]] std::optional<PendingIncoming> take() override;
-
-  private:
-    void receive(IncomingOffer offer) noexcept;
-    void deliver();
-    void fail(IncomingError error) noexcept;
-    void tick();
-    void cleanup();
-    void reject_pending() noexcept;
-    void check_cancel(Bytes wire) noexcept;
-    void lookup_cancel() noexcept;
-    RecordStore store_;
-    IncomingContext initial_;
-    std::function<std::optional<IncomingContext>()> context_;
-    std::weak_ptr<DiscoveryBackend> lease_, subscription_;
-    Executor executor_;
-    CallbackGate gate_;
-    Scheduler scheduler_;
-    IncomingOptions options_;
-    IncomingHandlers handlers_;
-    std::shared_ptr<IncomingOfferReplay> replay_;
-    SigningPublicKey signing_key_;
-    RecipientBoxPublicKey box_key_;
-    std::unique_ptr<TimerProducer> timer_;
-    std::unique_ptr<NativeIncomingListener> listener_;
-    std::optional<IncomingOffer> offer_;
-    std::chrono::steady_clock::time_point deadline_;
-    IncomingState state_ = IncomingState::Listening;
-};
 
 PublicIncoming::PublicIncoming(RecordStore store, IncomingContext initial,
                                std::function<std::optional<IncomingContext>()> context,
@@ -78,7 +31,8 @@ PublicIncoming::PublicIncoming(RecordStore store, IncomingContext initial,
       executor_(std::move(executor)), gate_(gate), scheduler_(std::move(scheduler)),
       options_(options), handlers_(std::move(handlers)), replay_(std::move(replay)),
       signing_key_(initial_.local.endpoint.identity->signing->public_key()),
-      box_key_(initial_.local.endpoint.identity->recipient->public_key()) {}
+      box_key_(initial_.local.endpoint.identity->recipient->public_key()),
+      offers_(options.persistent ? options.max_pending_requests : 1, 1048576) {}
 
 void PublicIncoming::initialize() {
     auto weak = weak_from_this();
@@ -106,9 +60,9 @@ std::optional<IncomingError> PublicIncoming::start() {
                                             auto self = weak.lock();
                                             return self && self->state_ == IncomingState::Listening;
                                         },
-                                        [weak](Bytes wire) {
+                                        [weak](const Bytes &wire) {
                                             if (auto self = weak.lock())
-                                                self->check_cancel(std::move(wire));
+                                                self->check_cancel(wire);
                                         }};
     auto created =
         NativeIncomingListener::create(store_, initial_, context_, utc_seconds, executor_,
@@ -136,33 +90,28 @@ void PublicIncoming::cleanup() {
 void PublicIncoming::close() {
     if (state_ == IncomingState::Closed)
         return;
-    if (state_ == IncomingState::Pending && offer_)
-        reject_pending();
+    if (state_ == IncomingState::Pending && pending())
+        reject_pending(*pending_id_);
+    if (options_.persistent)
+        while (auto id = offers_.first()) {
+            reject_pending(*id);
+            (void)offers_.take(*id);
+        }
     state_ = IncomingState::Closed;
-    offer_.reset();
+    clear_pending();
     cleanup();
 }
-void PublicIncoming::reject_pending() noexcept {
-    try {
-        const auto now = utc_seconds();
-        if (now > std::numeric_limits<std::uint64_t>::max() - 50)
-            throw std::overflow_error("rejection expiry overflow");
-        const auto &remote = offer_->peer;
-        SignalingFields fields{SignalingKind::Reject,
-                               initial_.local.endpoint.fields.instance_id,
-                               {remote.signing_public_key, remote.fields.instance_id},
-                               offer_->envelope.fields.attempt_id,
-                               0,
-                               now,
-                               now + 50,
-                               {}};
-        (void)publish_terminal_signal(
-            store_, remote.fields.signaling_inbox, *initial_.local.endpoint.identity->signing,
-            std::move(fields), remote.fields.recipient_public_key, *initial_.local.capability,
-            {now, 60, initial_.remote.clock_skew, signaling_payload_limit});
-    } catch (const std::exception &error) {
-        std::cerr << "p2pdc: " << error.what() << '\n';
-    }
+const PendingOffers::Entry *PublicIncoming::pending() const {
+    return pending_id_ ? offers_.find(*pending_id_) : nullptr;
+}
+void PublicIncoming::clear_pending() {
+    if (pending_id_)
+        (void)offers_.take(*pending_id_);
+    pending_id_.reset();
+}
+void PublicIncoming::reject_pending(IncomingRequestId id) noexcept {
+    if (const auto *entry = offers_.find(id))
+        reject_offer(entry->offer);
 }
 IncomingState PublicIncoming::state() const {
     if (timer_ && !timer_->healthy() && state_ != IncomingState::Closed &&
@@ -174,43 +123,97 @@ bool PublicIncoming::signaling_closed() const {
     return state_ != IncomingState::Listening && state_ != IncomingState::Pending && !listener_;
 }
 std::optional<Advertisement> PublicIncoming::peer() const {
-    if (state() != IncomingState::Pending || !offer_ ||
-        std::chrono::steady_clock::now() >= deadline_)
+    const auto *entry = pending();
+    if (state() != IncomingState::Pending || !entry ||
+        std::chrono::steady_clock::now() >= entry->deadline)
         return std::nullopt;
-    return offer_->peer;
+    return entry->offer.peer;
+}
+std::optional<IncomingRequestId> PublicIncoming::request_id() const {
+    return peer() ? pending_id_ : std::nullopt;
 }
 
 std::optional<PendingIncoming> PublicIncoming::peek() const {
-    if (state() != IncomingState::Pending || !offer_ ||
-        std::chrono::steady_clock::now() >= deadline_)
+    const auto *entry = pending();
+    if (state() != IncomingState::Pending || !entry ||
+        std::chrono::steady_clock::now() >= entry->deadline)
         return std::nullopt;
-    return PendingIncoming{*offer_, initial_.local.endpoint, lease_, subscription_, signing_key_,
-                           box_key_};
+    return PendingIncoming{
+        entry->offer, initial_.local.endpoint, lease_, subscription_, signing_key_, box_key_};
 }
 
 std::optional<PendingIncoming> PublicIncoming::take() {
-    if (state() != IncomingState::Pending || !offer_)
+    const auto *entry = pending();
+    if (state() != IncomingState::Pending || !entry)
         return std::nullopt;
-    if (std::chrono::steady_clock::now() >= deadline_) {
+    if (std::chrono::steady_clock::now() >= entry->deadline) {
         fail(IncomingError::Timeout);
         return std::nullopt;
     }
-    PendingIncoming result{
-        std::move(*offer_), initial_.local.endpoint, lease_, subscription_, signing_key_, box_key_};
-    offer_.reset();
+    auto taken = offers_.take(*pending_id_);
+    pending_id_.reset();
+    PendingIncoming result{std::move(taken->offer),
+                           initial_.local.endpoint,
+                           lease_,
+                           subscription_,
+                           signing_key_,
+                           box_key_};
     state_ = IncomingState::Accepted;
     cleanup();
     return result;
+}
+
+std::optional<PendingIncoming> PublicIncoming::peek_request(std::optional<std::uint64_t> id) const {
+    if (!options_.persistent)
+        return !id || id == pending_id_ ? peek() : std::nullopt;
+    const auto *entry = id ? offers_.find(*id) : nullptr;
+    if (state() != IncomingState::Listening || !entry ||
+        std::chrono::steady_clock::now() >= entry->deadline)
+        return std::nullopt;
+    return PendingIncoming{
+        entry->offer, initial_.local.endpoint, lease_, subscription_, signing_key_, box_key_};
+}
+std::optional<PendingIncoming> PublicIncoming::take_request(std::optional<std::uint64_t> id) {
+    if (!options_.persistent)
+        return !id || id == pending_id_ ? take() : std::nullopt;
+    if (!peek_request(id))
+        return std::nullopt;
+    auto entry = offers_.take(*id);
+    return PendingIncoming{std::move(entry->offer),
+                           initial_.local.endpoint,
+                           lease_,
+                           subscription_,
+                           signing_key_,
+                           box_key_};
+}
+void PublicIncoming::reject_request(std::optional<std::uint64_t> id) {
+    if (options_.persistent && id && peek_request(id)) {
+        reject_pending(*id);
+        (void)offers_.take(*id);
+    } else if (!options_.persistent && (!id || id == pending_id_))
+        close();
 }
 
 void PublicIncoming::receive(IncomingOffer offer) noexcept {
     if (state_ != IncomingState::Listening)
         return;
     try {
-        offer_ = std::move(offer);
-        deadline_ = std::chrono::steady_clock::now() + options_.request_timeout;
-        state_ = IncomingState::Pending;
-        if (!gate_.post([self = shared_from_this()] { self->deliver(); }))
+        auto id = offers_.add(std::move(offer),
+                              std::chrono::steady_clock::now() + options_.request_timeout);
+        if (!id) {
+            if (options_.persistent) {
+                reject_offer(offer);
+                report_overflow();
+                return;
+            }
+            fail(IncomingError::ResourceLimit);
+            return;
+        }
+        if (!options_.persistent) {
+            pending_id_ = *id;
+            state_ = IncomingState::Pending;
+        }
+        if (!gate_.post([self = shared_from_this(), id = *id] { self->deliver(id); }))
             fail(IncomingError::Backend);
         else
             lookup_cancel();
@@ -218,15 +221,24 @@ void PublicIncoming::receive(IncomingOffer offer) noexcept {
         fail(IncomingError::ResourceLimit);
     }
 }
-void PublicIncoming::deliver() {
-    if (state() != IncomingState::Pending || !offer_)
+void PublicIncoming::deliver(IncomingRequestId id) {
+    const auto *entry = offers_.find(id);
+    if ((options_.persistent ? state() != IncomingState::Listening
+                             : state() != IncomingState::Pending) ||
+        !entry)
         return;
-    if (std::chrono::steady_clock::now() >= deadline_) {
-        fail(IncomingError::Timeout);
+    if (std::chrono::steady_clock::now() >= entry->deadline) {
+        if (options_.persistent)
+            end_request(id, IncomingError::Timeout);
+        else
+            fail(IncomingError::Timeout);
         return;
     }
     try {
-        handlers_.on_request(offer_->peer);
+        if (options_.persistent)
+            handlers_.on_request_identified(id, entry->offer.peer);
+        else
+            handlers_.on_request(entry->offer.peer);
     } catch (...) {
         fail(IncomingError::Callback);
         throw;
@@ -237,7 +249,9 @@ void PublicIncoming::fail(IncomingError error) noexcept {
         state_ == IncomingState::Accepted)
         return;
     state_ = IncomingState::Failed;
-    offer_.reset();
+    clear_pending();
+    while (auto id = offers_.first())
+        (void)offers_.take(*id);
     try {
         (void)gate_.post([self = shared_from_this(), error] {
             if (self->state_ != IncomingState::Failed)
@@ -253,7 +267,14 @@ void PublicIncoming::fail(IncomingError error) noexcept {
 void PublicIncoming::tick() {
     if (state_ != IncomingState::Listening && state_ != IncomingState::Pending)
         return;
-    if (state_ == IncomingState::Pending && std::chrono::steady_clock::now() >= deadline_) {
+    while (options_.persistent && state_ == IncomingState::Listening) {
+        auto id = offers_.first_expired(std::chrono::steady_clock::now());
+        if (!id)
+            break;
+        end_request(*id, IncomingError::Timeout);
+    }
+    if (state_ == IncomingState::Pending &&
+        offers_.first_expired(std::chrono::steady_clock::now())) {
         fail(IncomingError::Timeout);
         return;
     }
@@ -271,8 +292,10 @@ void PublicIncoming::tick() {
     }
 }
 
-void PublicIncoming::check_cancel(Bytes wire) noexcept {
-    if (state_ != IncomingState::Pending || !offer_)
+void PublicIncoming::check_cancel(const Bytes &wire) noexcept {
+    const auto *entry = pending();
+    if (options_.persistent ? state_ != IncomingState::Listening || offers_.size() == 0
+                            : state_ != IncomingState::Pending || !entry)
         return;
     try {
         const auto now = utc_seconds();
@@ -282,17 +305,28 @@ void PublicIncoming::check_cancel(Bytes wire) noexcept {
             wire, *local.identity->recipient, recipient, *initial_.local.capability,
             {now, 60, initial_.remote.clock_skew, signaling_payload_limit});
         const auto *signal = std::get_if<SignalingEnvelope>(&decoded);
-        const auto &expected = offer_->envelope;
         if (signal && signal->fields.kind == SignalingKind::Cancel &&
-            signal->fields.sequence == cancel_sequence && signal->fields.payload.empty() &&
-            signal->sender_signing_key == expected.sender_signing_key &&
-            signal->fields.sender_instance == expected.fields.sender_instance &&
-            signal->fields.attempt_id == expected.fields.attempt_id)
-            fail(IncomingError::Canceled);
+            signal->fields.sequence == cancel_sequence && signal->fields.payload.empty()) {
+            auto id = offers_.find_attempt(*signal);
+            if (id && options_.persistent)
+                end_request(*id, IncomingError::Canceled);
+            else if (id)
+                fail(IncomingError::Canceled);
+        }
     } catch (const std::exception &error) {
         std::cerr << "p2pdc: cancellation verification failed: " << error.what() << '\n';
         fail(IncomingError::Backend);
     }
+}
+
+void PublicIncoming::end_request(IncomingRequestId id, IncomingError error) {
+    if (!offers_.take(id))
+        return;
+    if (handlers_.on_request_ended && !gate_.post([self = shared_from_this(), id, error] {
+            if (self->state_ == IncomingState::Listening && self->handlers_.on_request_ended)
+                self->handlers_.on_request_ended(id, error);
+        }))
+        fail(IncomingError::Backend);
 }
 
 void PublicIncoming::lookup_cancel() noexcept {
@@ -308,7 +342,7 @@ void PublicIncoming::lookup_cancel() noexcept {
                     executor([weak, result = std::move(result)]() mutable {
                         if (auto self = weak.lock())
                             for (auto &wire : result.batch.values)
-                                self->check_cancel(std::move(wire));
+                                self->check_cancel(wire);
                     });
                 } catch (const std::exception &error) {
                     std::cerr << "p2pdc: cancellation catch-up delivery failed: " << error.what()
@@ -322,7 +356,6 @@ void PublicIncoming::lookup_cancel() noexcept {
         std::cerr << "p2pdc: cancellation catch-up failed: " << error.what() << '\n';
     }
 }
-} // namespace
 
 std::shared_ptr<IncomingBackend>
 make_public_incoming(RecordStore store, IncomingContext initial,
@@ -331,7 +364,9 @@ make_public_incoming(RecordStore store, IncomingContext initial,
                      std::weak_ptr<DiscoveryBackend> subscription, Executor executor,
                      CallbackGate gate, Scheduler scheduler, IncomingOptions options,
                      IncomingHandlers handlers, std::shared_ptr<IncomingOfferReplay> replay) {
-    if (!context || !executor || !scheduler || !handlers.on_request || !handlers.on_error ||
+    if (!context || !executor || !scheduler ||
+        (options.persistent ? !handlers.on_request_identified : !handlers.on_request) ||
+        !handlers.on_error || !options.max_pending_requests || options.max_pending_requests > 128 ||
         !replay || options.request_timeout.count() <= 0 ||
         options.request_timeout > std::chrono::minutes(10) || options.poll_interval.count() < 10 ||
         options.poll_interval > options.request_timeout)

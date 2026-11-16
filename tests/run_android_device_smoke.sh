@@ -110,7 +110,7 @@ if [[ ${2:-} == --pair ]]; then
     echo 'Android public node pair passed'
 fi
 if [[ ${2:-} == --races ]]; then
-    if ! result=$("$adb_command" -s "$serial" shell "LD_LIBRARY_PATH='$remote' timeout 180 '$remote/native_pair' --races" | tr -d '\r'); then
+    if ! result=$("$adb_command" -s "$serial" shell "LD_LIBRARY_PATH='$remote' timeout 240 '$remote/native_pair' --races" | tr -d '\r'); then
         echo "Android public node races exited unsuccessfully: $result" >&2
         exit 1
     fi

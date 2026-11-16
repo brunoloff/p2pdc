@@ -40,6 +40,7 @@ EM_JS(int, race_mode, (), {
            : mode == "cancel"          ? 2
            : mode == "reject"          ? 3
            : mode == "cancel-accepted" ? 4
+           : mode == "persistent"      ? 5
                                        : 0;
 });
 EM_JS(int, mixed_mode, (), {

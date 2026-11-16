@@ -55,6 +55,26 @@ only a reference workload, not a library dependency.
 
 ## Post-alpha
 
+### High priority: multi-peer foundations
+
+Membership and room policies belong to higher-level code for now. The basic
+stack should let peers sharing a capability discover and connect to one another
+without requiring a fixed coordinator or prescribing a connection topology.
+
+- [x] Improve incoming connection handling for multiple peers: replace or
+  extend the single-shot listener with a persistent interface that can expose
+  and independently accept or reject concurrent requests. Define bounded
+  pending-request and overload behavior, cancellation, and lifecycle semantics.
+- [x] Remove the fixed eight-connection-handle limit, or make the limit
+  configurable. Account for concurrent attempts and retained handles, preserve
+  explicit resource limits and failure reporting, and consider capacity shared
+  across capabilities on the same node.
+
+### Other post-alpha work
+
+- [ ] Improve behavior when the per-lease replay cache fills: currently its
+  32 recent-offer bound fails the listener and discards pending requests. Make
+  sustained joining more resilient without weakening replay protection.
 - [ ] Validate Safari and mobile browsers, which are outside the first alpha's
   supported browser target.
 - [ ] Finish Android support: run the documented build from a fresh checkout and

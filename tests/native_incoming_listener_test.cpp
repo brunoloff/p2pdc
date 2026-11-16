@@ -1,4 +1,5 @@
 #include "../src/discovery/native_incoming_listener.hpp"
+#include "../src/discovery/pending_offers.hpp"
 #include "../src/transport/native_incoming_config.hpp"
 #include "native_attempt_fixture.hpp"
 
@@ -40,6 +41,63 @@ class NativeIncomingListenerTest : public NativeAttemptTest {
 };
 } // namespace
 
+TEST(PendingOffersTest, RetainsAndRemovesRequestsIndependently) {
+    PendingOffers offers(2, 128);
+    IncomingOffer first{}, second{};
+    first.wire = Bytes(10);
+    second.wire = Bytes(20);
+    auto a = offers.add(std::move(first), PendingOffers::Clock::time_point{});
+    auto b = offers.add(std::move(second), PendingOffers::Clock::time_point{} + 1s);
+    ASSERT_TRUE(a && b);
+    EXPECT_NE(*a, *b);
+    EXPECT_EQ(offers.first_expired(PendingOffers::Clock::time_point{}), a);
+    ASSERT_TRUE(offers.take(*a));
+    EXPECT_EQ(offers.size(), 1U);
+    EXPECT_TRUE(offers.find(*b));
+    EXPECT_FALSE(offers.take(*a));
+    EXPECT_EQ(offers.bytes(), 20U);
+}
+TEST(PendingOffersTest, EnforcesCountAndByteLimits) {
+    EXPECT_THROW(PendingOffers(0, 1), std::invalid_argument);
+    EXPECT_THROW(PendingOffers(1, 0), std::invalid_argument);
+    PendingOffers offers(1, 5);
+    IncomingOffer large{};
+    large.wire = Bytes(6);
+    EXPECT_FALSE(offers.add(std::move(large), {}));
+    IncomingOffer first{};
+    first.wire = Bytes(5);
+    auto id = offers.add(std::move(first), {});
+    ASSERT_TRUE(id);
+    EXPECT_FALSE(offers.add(IncomingOffer{}, {}));
+    ASSERT_TRUE(offers.take(*id));
+    EXPECT_EQ(offers.bytes(), 0U);
+    EXPECT_TRUE(offers.add(IncomingOffer{}, {}));
+}
+TEST(PendingOffersTest, FindsOnlyTheMatchingAuthenticatedAttempt) {
+    PendingOffers offers(3, 1024);
+    IncomingOffer a{}, b{};
+    a.envelope.sender_signing_key[0] = std::byte{1};
+    a.envelope.fields.sender_instance[0] = std::byte{2};
+    a.envelope.fields.attempt_id[0] = std::byte{3};
+    b.envelope = a.envelope;
+    b.envelope.fields.attempt_id[0] = std::byte{4};
+    auto cancel = a.envelope;
+    auto first = offers.add(std::move(a), PendingOffers::Clock::time_point{} + 1s);
+    auto second = offers.add(std::move(b), PendingOffers::Clock::time_point{} + 2s);
+    ASSERT_TRUE(first && second);
+    EXPECT_EQ(offers.find_attempt(cancel), first);
+    cancel.sender_signing_key[0] = std::byte{9};
+    EXPECT_FALSE(offers.find_attempt(cancel));
+    cancel.sender_signing_key[0] = std::byte{1};
+    cancel.fields.sender_instance[0] = std::byte{9};
+    EXPECT_FALSE(offers.find_attempt(cancel));
+    cancel.fields.sender_instance[0] = std::byte{2};
+    cancel.fields.attempt_id[0] = std::byte{4};
+    EXPECT_EQ(offers.find_attempt(cancel), second);
+    ASSERT_TRUE(offers.take(*second));
+    EXPECT_FALSE(offers.find_attempt(cancel));
+    EXPECT_EQ(offers.first_expired(PendingOffers::Clock::time_point{} + 1s), first);
+}
 TEST_F(NativeIncomingListenerTest, ReceivesVerifiedOfferAndSuppressesReplay) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
@@ -63,7 +121,29 @@ TEST_F(NativeIncomingListenerTest, ReceivesVerifiedOfferAndSuppressesReplay) {
     watch->close();
     EXPECT_FALSE(watch->poll());
 }
-
+TEST_F(NativeIncomingListenerTest, ObservesRecordsWhileContinuingToAcceptOffers) {
+    Peer sender(std::byte{1}), receiver(std::byte{2});
+    auto context = make_context(receiver, verified_advertisement(sender));
+    std::vector<Bytes> records;
+    auto created = NativeIncomingListener::create(
+        NativeStore(second, {32768, 128, 1048576}), context, [&] { return context; },
+        [&] { return time; }, loop.executor(), MemoryBudget(1048576),
+        {[&](IncomingOffer offer) { offers.push_back(std::move(offer)); },
+         [&](IncomingListenerError error) { errors.push_back(error); }, [] { return true; },
+         [&](const Bytes &wire) { records.push_back(wire); }});
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<NativeIncomingListener>>(created));
+    auto watch = std::move(std::get<std::unique_ptr<NativeIncomingListener>>(created));
+    const auto cancel = signed_seed(sender, receiver, SignalingKind::Cancel);
+    const auto offer = signed_seed(sender, receiver, SignalingKind::Offer);
+    ASSERT_TRUE(publish(receiver, cancel));
+    ASSERT_TRUE(publish(receiver, offer));
+    ASSERT_TRUE(
+        loop.until([&] { return !watch->poll() || (records.size() >= 2 && !offers.empty()); }));
+    ASSERT_TRUE(errors.empty());
+    EXPECT_NE(std::find(records.begin(), records.end(), cancel), records.end());
+    EXPECT_NE(std::find(records.begin(), records.end(), offer), records.end());
+    EXPECT_EQ(offers.size(), 1U);
+}
 TEST_F(NativeIncomingListenerTest, MailboxBudgetExhaustionReportsResourceLimit) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
@@ -75,7 +155,6 @@ TEST_F(NativeIncomingListenerTest, MailboxBudgetExhaustionReportsResourceLimit) 
     EXPECT_EQ(errors.front(), IncomingListenerError::ResourceLimit);
     EXPECT_TRUE(offers.empty());
 }
-
 TEST_F(NativeIncomingListenerTest, PausedOwnerDoesNotConsumeUnpresentedOffers) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
@@ -109,7 +188,6 @@ TEST_F(NativeIncomingListenerTest, PausedOwnerDoesNotConsumeUnpresentedOffers) {
     ASSERT_EQ(offers.size(), 2U);
     EXPECT_EQ(offers.back().wire, second_offer);
 }
-
 TEST_F(NativeIncomingListenerTest, RetriesUnknownPeerWhenDiscoveryCatchesUp) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     const auto advertisement = verified_advertisement(sender);
@@ -132,7 +210,6 @@ TEST_F(NativeIncomingListenerTest, RetriesUnknownPeerWhenDiscoveryCatchesUp) {
     EXPECT_EQ(watch->pending_offers(), 0U);
     EXPECT_EQ(budget.used(), 0U);
 }
-
 TEST_F(NativeIncomingListenerTest, UnknownPeerQueueIsBounded) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
@@ -153,7 +230,6 @@ TEST_F(NativeIncomingListenerTest, UnknownPeerQueueIsBounded) {
     watch->close();
     EXPECT_EQ(budget.used(), 0U);
 }
-
 TEST_F(NativeIncomingListenerTest, ExpiredUnknownOffersReleaseReservations) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
@@ -173,7 +249,6 @@ TEST_F(NativeIncomingListenerTest, ExpiredUnknownOffersReleaseReservations) {
     watch->close();
     EXPECT_EQ(budget.used(), 0U);
 }
-
 TEST_F(NativeIncomingListenerTest, DuplicateUnknownOffersDoNotExhaustQueue) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));

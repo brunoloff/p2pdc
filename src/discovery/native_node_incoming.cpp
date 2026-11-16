@@ -184,17 +184,30 @@ ListenResult Node::listen(const Lease &, const Subscription &, Scheduler, Incomi
 #ifdef P2PDC_HAVE_PUBLIC_CONNECT
 ConnectResult Node::accept(IncomingListener &listener, IceConfig ice, Scheduler scheduler,
                            ConnectOptions options, ConnectionHandlers handlers) {
+    return accept_request(listener, std::nullopt, std::move(ice), std::move(scheduler), options,
+                          std::move(handlers));
+}
+ConnectResult Node::accept(IncomingListener &listener, IncomingRequestId request_id, IceConfig ice,
+                           Scheduler scheduler, ConnectOptions options,
+                           ConnectionHandlers handlers) {
+    return accept_request(listener, request_id, std::move(ice), std::move(scheduler), options,
+                          std::move(handlers));
+}
+ConnectResult Node::accept_request(IncomingListener &listener,
+                                   std::optional<std::uint64_t> request_id, IceConfig ice,
+                                   Scheduler scheduler, ConnectOptions options,
+                                   ConnectionHandlers handlers) {
     auto state = state_;
     if (state->phase != detail::NodePhase::Running || !healthy())
         return ConnectError::NotReady;
     if (!contains(state->incoming, listener.state_))
         return ConnectError::InvalidPeer;
     std::erase_if(state->connections, [](const auto &entry) { return entry.expired(); });
-    if (state->connections.size() >= 8)
+    if (state->connections.size() >= state->max_connections)
         return ConnectError::ResourceLimit;
     detail::validate_public_connection_settings(state->executor, scheduler, options, handlers);
     detail::validate_public_ice_settings(ice);
-    auto pending = listener.state_->peek();
+    auto pending = listener.state_->peek_request(request_id);
     if (!pending)
         return ConnectError::InvalidPeer;
     auto local = pending->lease.lock();
@@ -218,10 +231,10 @@ ConnectResult Node::accept(IncomingListener &listener, IceConfig ice, Scheduler 
     auto opposing = state->collisions.opposing(*admission, detail::ConnectionDirection::Incoming);
     if (!opposing.empty() &&
         !detail::CollisionRegistry::preferred(*admission, detail::ConnectionDirection::Incoming)) {
-        listener.close();
+        listener.state_->reject_request(request_id);
         return ConnectError::Superseded;
     }
-    pending = listener.state_->take();
+    pending = listener.state_->take_request(request_id);
     if (!pending)
         return ConnectError::InvalidPeer;
     std::weak_ptr<State> node = state;
@@ -242,6 +255,12 @@ ConnectResult Node::accept(IncomingListener &listener, IceConfig ice, Scheduler 
 #else
 ConnectResult Node::accept(IncomingListener &, IceConfig, Scheduler, ConnectOptions,
                            ConnectionHandlers) {
+    if (state_->phase != detail::NodePhase::Running || !healthy())
+        return ConnectError::NotReady;
+    return ConnectError::Unsupported;
+}
+ConnectResult Node::accept(IncomingListener &, IncomingRequestId, IceConfig, Scheduler,
+                           ConnectOptions, ConnectionHandlers) {
     if (state_->phase != detail::NodePhase::Running || !healthy())
         return ConnectError::NotReady;
     return ConnectError::Unsupported;
