@@ -291,6 +291,10 @@ void PublicIncoming::check_cancel(const Bytes &wire) noexcept {
     if (options_.persistent ? state_ != IncomingState::Listening || offers_.size() == 0
                             : state_ != IncomingState::Pending || !entry)
         return;
+    // A cancel has an empty payload and signaling records are unpadded, so any
+    // other size cannot be a cancel; skip the box-open and signature check.
+    if (wire.size() != signaling_wire_overhead)
+        return;
     try {
         const auto now = forward_utc_seconds();
         const auto &local = initial_.local.endpoint;

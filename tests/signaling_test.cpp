@@ -360,3 +360,12 @@ TEST_F(SignalingTest, MailboxWireLimitIncludesEncryptionAndSignatureOverhead) {
     ASSERT_TRUE(std::holds_alternative<SignalingError>(oversized));
     EXPECT_EQ(std::get<SignalingError>(oversized), SignalingError::TooLarge);
 }
+
+TEST_F(SignalingTest, EmptyPayloadRecordIsExactlyTheWireOverhead) {
+    auto input = fields();
+    input.kind = SignalingKind::Cancel;
+    input.payload.clear();
+    auto encoded = encode_signaling(sender, input, recipient.public_key(), capability, policy);
+    ASSERT_TRUE(std::holds_alternative<Bytes>(encoded));
+    EXPECT_EQ(std::get<Bytes>(encoded).size(), signaling_wire_overhead);
+}
