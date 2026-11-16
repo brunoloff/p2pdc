@@ -1,10 +1,20 @@
 #include "collision_registry.hpp"
 #include "connection_admission.hpp"
 
+#include <sodium.h>
+
 #include <algorithm>
 #include <tuple>
 
 namespace p2pdc::detail {
+namespace {
+// Capabilities are secrets; compare them in constant time.
+bool same_secret(const Bytes &first, const Bytes &second) {
+    return first.size() == second.size() &&
+           sodium_memcmp(first.data(), second.data(), first.size()) == 0;
+}
+} // namespace
+
 std::vector<std::shared_ptr<ConnectionBackend>>
 CollisionRegistry::opposing(const ConnectionAdmission &admission, ConnectionDirection direction) {
     std::erase_if(entries_, [](const auto &entry) {
@@ -15,7 +25,8 @@ CollisionRegistry::opposing(const ConnectionAdmission &admission, ConnectionDire
     std::vector<std::shared_ptr<ConnectionBackend>> result;
     for (const auto &entry : entries_) {
         auto capability = entry.capability.lock();
-        if (entry.direction != direction && capability && *capability == *admission.capability &&
+        if (entry.direction != direction && capability &&
+            same_secret(*capability, *admission.capability) &&
             entry.local_key == admission.local.identity->signing->public_key() &&
             entry.local_instance == admission.local.fields.instance_id &&
             entry.remote_key == admission.remote.signing_public_key &&
