@@ -40,14 +40,15 @@ test("incoming admission distinguishes waiting, ignored, unknown and terminal er
     incoming.close();
 });
 
-test("incoming admission rejects bad inputs and regressing time", () => {
+test("incoming admission rejects bad inputs and large time regressions", () => {
     const f = fixture();
     assert.throws(() => new WasmIncoming(f.lease, { ...f.watch, discovery: { module: {} } }), TypeError);
     const incoming = new WasmIncoming(f.lease, f.watch, f.options);
     assert.throws(() => incoming.receive("record"), TypeError);
     assert.throws(() => incoming.receive(Uint8Array.of(1), "yes"), TypeError);
     assert.equal(incoming.receive(Uint8Array.of(1)).status, "admitted");
-    f.setNow(999); assert.equal(incoming.receive(Uint8Array.of(1)).status, "failed");
+    f.setNow(999); assert.equal(incoming.receive(Uint8Array.of(1)).status, "admitted");
+    f.setNow(969); assert.equal(incoming.receive(Uint8Array.of(1)).status, "failed");
     incoming.close();
 });
 
