@@ -1,4 +1,5 @@
 #include "native_public_watch.hpp"
+#include "../core/callback_failure.hpp"
 
 #include "../core/deferred_events.hpp"
 #include "../core/wall_clock.hpp"
@@ -132,7 +133,7 @@ void PublicWatch::peer(Advertisement value, PeerEvent event) noexcept {
                     self->handlers_.on_peer(std::move(value), event);
                 } catch (...) {
                     self->fail(WatchError::Callback);
-                    throw;
+                    log_callback_exception("on_peer");
                 }
             }
         });
@@ -150,7 +151,7 @@ void PublicWatch::catchup(bool complete) noexcept {
                     self->handlers_.on_catchup(complete);
                 } catch (...) {
                     self->fail(WatchError::Callback);
-                    throw;
+                    log_callback_exception("on_catchup");
                 }
             }
         });
@@ -170,7 +171,7 @@ void PublicWatch::status(DiscoveryStatus value) noexcept {
                     self->handlers_.on_status(value);
                 } catch (...) {
                     self->fail(WatchError::Callback);
-                    throw;
+                    log_callback_exception("on_status");
                 }
             }
         });

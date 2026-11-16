@@ -276,9 +276,8 @@ TEST_F(PublicWatchTest, ThrowingPeerHandlerMarksSubscriptionUnhealthy) {
                                           std::chrono::system_clock::now().time_since_epoch())
                                           .count());
     ASSERT_TRUE(publish(advertisement(1, time, time + 20)));
-    EXPECT_THROW(static_cast<void>(advance_until([] { return false; })), std::runtime_error);
-    EXPECT_FALSE(subscription->healthy());
     ASSERT_TRUE(advance_until([&] { return !failures.empty(); }));
+    EXPECT_FALSE(subscription->healthy());
     EXPECT_EQ(failures.front(), WatchError::Callback);
     stop_node();
 }
@@ -393,9 +392,8 @@ TEST_F(PublicWatchTest, ThrowingPublicationHandlerMarksLeaseUnhealthy) {
                                   [&](auto error) { errors.push_back(error); }});
     ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Lease>>(result));
     auto lease = std::move(std::get<std::unique_ptr<Lease>>(result));
-    EXPECT_THROW(static_cast<void>(advance_until([] { return false; })), std::runtime_error);
-    EXPECT_FALSE(lease->healthy());
     ASSERT_TRUE(advance_until([&] { return !errors.empty(); }));
+    EXPECT_FALSE(lease->healthy());
     EXPECT_EQ(errors.front(), AnnouncementError::Callback);
     stop_node();
 }

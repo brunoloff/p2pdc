@@ -1,4 +1,5 @@
 #include "public_incoming_impl.hpp"
+#include "../core/callback_failure.hpp"
 #include "terminal_signal.hpp"
 
 #include "../core/timer_producer.hpp"
@@ -234,7 +235,7 @@ void PublicIncoming::deliver(IncomingRequestId id) {
             handlers_.on_request(entry->offer.peer);
     } catch (...) {
         fail(IncomingError::Callback);
-        throw;
+        log_callback_exception("on_request");
     }
 }
 void PublicIncoming::fail(IncomingError error) noexcept {

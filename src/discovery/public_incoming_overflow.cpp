@@ -1,4 +1,5 @@
 #include "../security/signaling_limits.hpp"
+#include "../core/callback_failure.hpp"
 #include "../core/wall_clock.hpp"
 #include "public_incoming_impl.hpp"
 #include "terminal_signal.hpp"
@@ -42,7 +43,7 @@ void PublicIncoming::report_overflow() {
                 self->handlers_.on_overflow();
             } catch (...) {
                 self->fail(IncomingError::Callback);
-                throw;
+                log_callback_exception("on_overflow");
             }
         }))
         fail(IncomingError::Backend);

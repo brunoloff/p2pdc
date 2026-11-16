@@ -1,4 +1,5 @@
 #include "native_public_watch.hpp"
+#include "../core/callback_failure.hpp"
 
 #include "../core/deferred_events.hpp"
 #include "../core/wall_clock.hpp"
@@ -110,7 +111,7 @@ void PublicLease::published() noexcept {
                     self->handlers_.on_published();
                 } catch (...) {
                     self->fail(AnnouncementError::Callback);
-                    throw;
+                    log_callback_exception("on_published");
                 }
             }
         });
@@ -127,7 +128,7 @@ void PublicLease::retrying() noexcept {
                     self->handlers_.on_error(AnnouncementError::Retrying);
                 } catch (...) {
                     self->fail(AnnouncementError::Callback);
-                    throw;
+                    log_callback_exception("on_error");
                 }
             }
         });
