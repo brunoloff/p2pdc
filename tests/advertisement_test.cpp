@@ -1,3 +1,4 @@
+#include "../src/security/protocol_signature.hpp"
 #include "p2pdc/advertisement.h"
 
 #include <gtest/gtest.h>
@@ -74,8 +75,8 @@ class AdvertisementTest : public ::testing::Test {
     }
 
     Bytes resign(Bytes bytes) const {
-        const auto signature = std::get<Signature>(
-            identity.sign(bound_signature_input(ByteView(bytes).first(advertisement_body_size))));
+        const auto signature = std::get<Signature>(detail::ProtocolSigning::sign(
+            identity, bound_signature_input(ByteView(bytes).first(advertisement_body_size))));
         std::copy(signature.begin(), signature.end(), bytes.begin() + advertisement_body_size);
         return reseal(bytes);
     }
@@ -214,8 +215,8 @@ TEST_F(AdvertisementTest, RejectsEachSignedFieldChangedByCapabilityHolder) {
 
 TEST_F(AdvertisementTest, RejectsSignatureFromDifferentDomain) {
     auto body = plaintext(wire());
-    const auto signature =
-        std::get<Signature>(identity.sign(ByteView(body).first(advertisement_body_size)));
+    const auto signature = std::get<Signature>(
+        detail::ProtocolSigning::sign(identity, ByteView(body).first(advertisement_body_size)));
     std::copy(signature.begin(), signature.end(), body.begin() + advertisement_body_size);
     EXPECT_EQ(std::get<CryptoError>(decode_advertisement(reseal(body), capability, policy)),
               CryptoError::AuthenticationFailed);

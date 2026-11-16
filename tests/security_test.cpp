@@ -1,3 +1,4 @@
+#include "../src/security/protocol_signature.hpp"
 #include "p2pdc/security.h"
 
 #include <gtest/gtest.h>
@@ -48,10 +49,11 @@ TEST(SecurityIdentity, MatchesRfc8032TestVectorOne) {
     const auto &identity = std::get<Identity>(imported);
     const auto actual_key = identity.public_key();
     EXPECT_EQ(Bytes(actual_key.begin(), actual_key.end()), public_key);
-    const auto produced = std::get<Signature>(identity.sign({}));
+    // RFC 8032 test 1 checks raw Ed25519, which only protocol code uses.
+    const auto produced = std::get<Signature>(detail::ProtocolSigning::sign(identity, {}));
     EXPECT_EQ(Bytes(produced.begin(), produced.end()), signature);
-    EXPECT_TRUE(
-        std::holds_alternative<std::monostate>(verify_signature(public_key, {}, signature)));
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(
+        detail::verify_protocol_signature(public_key, {}, signature)));
     sodium_memzero(seed.data(), seed.size());
 }
 
@@ -214,4 +216,24 @@ TEST(SecurityEncryption, RejectsMalformedLengthsAndResourceLimits) {
     EXPECT_EQ(std::get<CryptoError>(decrypt_payload(capability, payload.nonce, payload.ciphertext,
                                                     associated_data, 2)),
               CryptoError::TooLarge);
+}
+
+TEST(SecuritySignatures, ApplicationSignaturesCannotBeUsedAsProtocolSignatures) {
+    auto identity = std::get<Identity>(Identity::generate());
+    const Bytes message{std::byte{'p'}, std::byte{'2'}, std::byte{'p'}};
+    const auto application = std::get<Signature>(identity.sign(message));
+    const auto protocol = std::get<Signature>(detail::ProtocolSigning::sign(identity, message));
+    EXPECT_NE(application, protocol);
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(
+        verify_signature(identity.public_key(), message, application)));
+    EXPECT_EQ(std::get<CryptoError>(detail::verify_protocol_signature(identity.public_key(),
+                                                                       message, application)),
+              CryptoError::AuthenticationFailed);
+    EXPECT_EQ(std::get<CryptoError>(verify_signature(identity.public_key(), message, protocol)),
+              CryptoError::AuthenticationFailed);
+    const auto domain = std::as_bytes(std::span(application_signature_domain));
+    Bytes prefixed(domain.begin(), domain.end());
+    prefixed.insert(prefixed.end(), message.begin(), message.end());
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(
+        detail::verify_protocol_signature(identity.public_key(), prefixed, application)));
 }

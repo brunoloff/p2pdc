@@ -1,4 +1,5 @@
 #include "p2pdc/advertisement.h"
+#include "../security/protocol_signature.hpp"
 
 #include <sodium.h>
 
@@ -142,8 +143,9 @@ AdvertisementResult<Advertisement> verify_body(ByteView plaintext, const GroupCo
     }
     const auto body = plaintext.first(advertisement_body_size);
     const auto input = signature_input(context, body);
-    const auto verification = verify_signature(body.subspan(1, signing_public_key_size), input,
-                                               plaintext.subspan(advertisement_body_size));
+    const auto verification =
+        detail::verify_protocol_signature(body.subspan(1, signing_public_key_size), input,
+                                          plaintext.subspan(advertisement_body_size));
     if (const auto *error = std::get_if<CryptoError>(&verification)) {
         return *error;
     }
@@ -166,7 +168,8 @@ AdvertisementResult<Bytes> encode_advertisement(const Identity &identity,
     if (const auto *error = std::get_if<CryptoError>(&context)) {
         return *error;
     }
-    const auto signed_body = identity.sign(signature_input(std::get<GroupContext>(context), body));
+    const auto signed_body = detail::ProtocolSigning::sign(
+        identity, signature_input(std::get<GroupContext>(context), body));
     if (const auto *error = std::get_if<CryptoError>(&signed_body)) {
         return *error;
     }

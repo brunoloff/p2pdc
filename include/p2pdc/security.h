@@ -4,8 +4,12 @@
 
 #include <array>
 #include <memory>
+#include <string_view>
 
 namespace p2pdc {
+namespace detail {
+struct ProtocolSigning;
+}
 
 inline constexpr std::size_t identity_seed_size = 32;
 inline constexpr std::size_t signing_public_key_size = 32;
@@ -17,6 +21,11 @@ inline constexpr std::size_t encryption_tag_size = 16;
 using SigningPublicKey = std::array<std::byte, signing_public_key_size>;
 using Signature = std::array<std::byte, signature_size>;
 using EncryptionNonce = std::array<std::byte, encryption_nonce_size>;
+
+// Prefix of every message signed or verified through the public API. No p2pdc
+// protocol signature input starts with it, so an application that signs data
+// with a node identity can never produce a valid protocol record.
+inline constexpr std::string_view application_signature_domain = "p2pdc/application/signature/v1";
 
 enum class CryptoError {
     InitializationFailed,
@@ -45,16 +54,20 @@ class Identity {
     Identity &operator=(const Identity &) = delete;
 
     [[nodiscard]] SigningPublicKey public_key() const;
+    // Signs application_signature_domain || message.
     [[nodiscard]] CryptoResult<Signature> sign(ByteView message) const;
     [[nodiscard]] CryptoStatus export_seed(std::span<std::byte> destination) const;
 
   private:
+    friend struct detail::ProtocolSigning;
     struct Secret;
     Identity(std::unique_ptr<Secret> secret, SigningPublicKey public_key);
+    [[nodiscard]] CryptoResult<Signature> sign_raw(ByteView message) const;
     std::unique_ptr<Secret> secret_;
     SigningPublicKey public_key_;
 };
 
+// Verifies a signature made by Identity::sign over application_signature_domain || message.
 [[nodiscard]] CryptoStatus verify_signature(ByteView public_key, ByteView message,
                                             ByteView signature);
 

@@ -1,4 +1,5 @@
 #include "p2pdc/signaling.h"
+#include "protocol_signature.hpp"
 
 #include <sodium.h>
 
@@ -161,9 +162,9 @@ SignalingResult<SignalingEnvelope> verify_plaintext(ByteView plaintext, const Gr
         return *error;
     }
     const auto body = plaintext.first(plaintext.size() - signature_size);
-    const auto verified =
-        verify_signature(body.subspan(6, signing_public_key_size), signature_input(context, body),
-                         plaintext.last(signature_size));
+    const auto verified = detail::verify_protocol_signature(
+        body.subspan(6, signing_public_key_size), signature_input(context, body),
+        plaintext.last(signature_size));
     if (const auto *error = std::get_if<CryptoError>(&verified)) {
         return *error;
     }
@@ -202,7 +203,8 @@ SignalingResult<Bytes> encode_signaling(const Identity &sender, const SignalingF
         return *error;
     }
     auto body = encode_body(sender, fields);
-    const auto signature = sender.sign(signature_input(std::get<GroupContext>(context), body));
+    const auto signature = detail::ProtocolSigning::sign(
+        sender, signature_input(std::get<GroupContext>(context), body));
     if (const auto *error = std::get_if<CryptoError>(&signature)) {
         return *error;
     }

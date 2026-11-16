@@ -1,4 +1,5 @@
 #include "p2pdc/security.h"
+#include "protocol_signature.hpp"
 
 #include <sodium.h>
 
@@ -100,7 +101,27 @@ CryptoResult<Identity> Identity::import_seed(ByteView seed) {
 
 SigningPublicKey Identity::public_key() const { return public_key_; }
 
+namespace {
+Bytes application_input(ByteView message) {
+    const auto domain = std::as_bytes(std::span(application_signature_domain));
+    Bytes input(domain.begin(), domain.end());
+    input.insert(input.end(), message.begin(), message.end());
+    return input;
+}
+} // namespace
+
 CryptoResult<Signature> Identity::sign(ByteView message) const {
+    if (message.size() > crypto_sign_MESSAGEBYTES_MAX - application_signature_domain.size()) {
+        return CryptoError::TooLarge;
+    }
+    try {
+        return sign_raw(application_input(message));
+    } catch (const std::bad_alloc &) {
+        return CryptoError::AllocationFailed;
+    }
+}
+
+CryptoResult<Signature> Identity::sign_raw(ByteView message) const {
     if (!secret_) {
         return CryptoError::InvalidIdentity;
     }
@@ -129,6 +150,22 @@ CryptoStatus Identity::export_seed(std::span<std::byte> destination) const {
 }
 
 CryptoStatus verify_signature(ByteView public_key, ByteView message, ByteView signature) {
+    if (message.size() > crypto_sign_MESSAGEBYTES_MAX - application_signature_domain.size()) {
+        return CryptoError::TooLarge;
+    }
+    try {
+        return detail::verify_protocol_signature(public_key, application_input(message), signature);
+    } catch (const std::bad_alloc &) {
+        return CryptoError::AllocationFailed;
+    }
+}
+
+CryptoResult<Signature> detail::ProtocolSigning::sign(const Identity &identity, ByteView message) {
+    return identity.sign_raw(message);
+}
+
+CryptoStatus detail::verify_protocol_signature(ByteView public_key, ByteView message,
+                                               ByteView signature) {
     if (!initialized()) {
         return CryptoError::InitializationFailed;
     }

@@ -1,4 +1,5 @@
 #include "p2pdc/handshake.h"
+#include "protocol_signature.hpp"
 
 #include <sodium.h>
 
@@ -140,7 +141,7 @@ HandshakeResult<Bytes> encode_handshake(const Identity &identity, const Handshak
         return HandshakeError::WrongIdentity;
     }
     auto body = encode_body(record);
-    auto signature = identity.sign(signature_input(context, body));
+    auto signature = detail::ProtocolSigning::sign(identity, signature_input(context, body));
     if (auto *error = std::get_if<CryptoError>(&signature)) {
         return *error;
     }
@@ -168,8 +169,9 @@ HandshakeResult<HandshakeRecord> decode_handshake(ByteView wire, const Handshake
         return HandshakeError::WrongRole;
     }
     const auto body = wire.first(handshake_record_size - signature_size);
-    auto verified = verify_signature(role_key(context, expected_role),
-                                     signature_input(context, body), wire.last(signature_size));
+    auto verified = detail::verify_protocol_signature(role_key(context, expected_role),
+                                                      signature_input(context, body),
+                                                      wire.last(signature_size));
     if (auto *error = std::get_if<CryptoError>(&verified)) {
         return *error;
     }

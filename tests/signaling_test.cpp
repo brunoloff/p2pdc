@@ -1,3 +1,4 @@
+#include "../src/security/protocol_signature.hpp"
 #include "../src/security/signaling_limits.hpp"
 #include "p2pdc/signaling.h"
 
@@ -76,7 +77,8 @@ class SignalingTest : public ::testing::Test {
 
     Bytes resign(Bytes bytes) const {
         const auto body = ByteView(bytes).first(bytes.size() - signature_size);
-        const auto signature = std::get<Signature>(sender.sign(signature_input(body)));
+        const auto signature =
+            std::get<Signature>(detail::ProtocolSigning::sign(sender, signature_input(body)));
         std::copy(signature.begin(), signature.end(), bytes.end() - signature_size);
         return reseal(bytes);
     }
@@ -130,8 +132,8 @@ TEST_F(SignalingTest, BindsEverySignedFieldAndRejectsSignatureSubstitution) {
                   CryptoError::AuthenticationFailed);
     }
     auto altered = original;
-    const auto signature = std::get<Signature>(
-        receiver.sign(signature_input(ByteView(altered).first(altered.size() - signature_size))));
+    const auto signature = std::get<Signature>(detail::ProtocolSigning::sign(
+        receiver, signature_input(ByteView(altered).first(altered.size() - signature_size))));
     std::copy(signature.begin(), signature.end(), altered.end() - signature_size);
     EXPECT_EQ(std::get<CryptoError>(decode(reseal(altered))), CryptoError::AuthenticationFailed);
 }
@@ -303,8 +305,8 @@ TEST_F(SignalingTest, HandlesMaximumUtcTimesWithoutOverflow) {
 
 TEST_F(SignalingTest, RejectsSignaturesWithDifferentDomain) {
     auto body = plaintext();
-    const auto signature =
-        std::get<Signature>(sender.sign(ByteView(body).first(body.size() - signature_size)));
+    const auto signature = std::get<Signature>(
+        detail::ProtocolSigning::sign(sender, ByteView(body).first(body.size() - signature_size)));
     std::copy(signature.begin(), signature.end(), body.end() - signature_size);
     EXPECT_EQ(std::get<CryptoError>(decode(reseal(body))), CryptoError::AuthenticationFailed);
 }
