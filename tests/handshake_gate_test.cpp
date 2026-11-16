@@ -1,4 +1,5 @@
 #include "../src/security/handshake_gate.hpp"
+#include "borrowed.hpp"
 
 #include <gtest/gtest.h>
 
@@ -50,10 +51,10 @@ struct Pair {
                 [this](GateError error) { errors.push_back(error); }};
     }
     void create() {
-        ga = std::make_unique<HandshakeGate>(a, context(), HandshakeRole::Offerer, 100, 200, left,
-                                             callbacks());
-        gb = std::make_unique<HandshakeGate>(b, context(), HandshakeRole::Answerer, 80, 200, right,
-                                             callbacks());
+        ga = std::make_unique<HandshakeGate>(borrowed(a), context(), HandshakeRole::Offerer, 100,
+                                             200, left, callbacks());
+        gb = std::make_unique<HandshakeGate>(borrowed(b), context(), HandshakeRole::Answerer, 80,
+                                             200, right, callbacks());
     }
     void deliver() {
         for (int count = 0; count < 16 && (!left.sent.empty() || !right.sent.empty()); ++count) {
@@ -145,13 +146,14 @@ TEST(HandshakeGate, RejectsPrematureDataAndHonorsTimeout) {
 
 TEST(HandshakeGate, RejectsInvalidLimitsAndCallbackDestructionIsSafe) {
     Pair pair;
-    EXPECT_THROW((HandshakeGate{pair.a, pair.context(), HandshakeRole::Offerer, 100, 139, pair.left,
-                                pair.callbacks()}),
+    EXPECT_THROW((HandshakeGate{borrowed(pair.a), pair.context(), HandshakeRole::Offerer, 100, 139,
+                                pair.left, pair.callbacks()}),
                  std::invalid_argument);
     auto callbacks = pair.callbacks();
     callbacks.on_error = [&](GateError) { pair.ga.reset(); };
-    pair.ga = std::make_unique<HandshakeGate>(pair.a, pair.context(), HandshakeRole::Offerer, 100,
-                                              200, pair.left, std::move(callbacks));
+    pair.ga =
+        std::make_unique<HandshakeGate>(borrowed(pair.a), pair.context(), HandshakeRole::Offerer,
+                                        100, 200, pair.left, std::move(callbacks));
     pair.ga->set_transport_ready(true);
     pair.ga->on_message({});
     EXPECT_FALSE(pair.ga);
@@ -160,9 +162,9 @@ TEST(HandshakeGate, RejectsInvalidLimitsAndCallbackDestructionIsSafe) {
 
 TEST(HandshakeGate, AllocationFailureDuringVerificationClosesAndReportsError) {
     Pair pair;
-    pair.ga = std::make_unique<HandshakeGate>(pair.a, pair.context(), HandshakeRole::Offerer, 100,
-                                              200, pair.left, pair.callbacks(),
-                                              [] { throw std::bad_alloc(); });
+    pair.ga = std::make_unique<HandshakeGate>(borrowed(pair.a), pair.context(),
+                                              HandshakeRole::Offerer, 100, 200, pair.left,
+                                              pair.callbacks(), [] { throw std::bad_alloc(); });
     pair.ga->set_transport_ready(true);
     pair.ga->on_message(Bytes{std::byte{0}});
     ASSERT_EQ(pair.errors.size(), 1U);

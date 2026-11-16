@@ -6,11 +6,13 @@
 
 namespace p2pdc {
 
-HandshakeExchange::HandshakeExchange(const Identity &identity, HandshakeContext context,
-                                     HandshakeRole role, HandshakeNonce nonce,
-                                     std::uint32_t receive_limit)
-    : identity_(identity), context_(std::move(context)), role_(role), nonce_(nonce),
+HandshakeExchange::HandshakeExchange(std::shared_ptr<const Identity> identity,
+                                     HandshakeContext context, HandshakeRole role,
+                                     HandshakeNonce nonce, std::uint32_t receive_limit)
+    : identity_(std::move(identity)), context_(std::move(context)), role_(role), nonce_(nonce),
       receive_limit_(receive_limit) {
+    if (!identity_)
+        throw std::invalid_argument("handshake requires an identity");
     auto encoded = hello();
     if (!std::holds_alternative<Bytes>(encoded)) {
         throw std::invalid_argument("invalid handshake identity, context, role, nonce or limit");
@@ -21,7 +23,7 @@ HandshakeResult<Bytes> HandshakeExchange::hello() const {
     if (hello_sent_) {
         return HandshakeError::InvalidState;
     }
-    return encode_handshake(identity_, context_,
+    return encode_handshake(*identity_, context_,
                             {HandshakeKind::Hello, role_, receive_limit_, nonce_, {}});
 }
 
@@ -38,7 +40,7 @@ HandshakeResult<Bytes> HandshakeExchange::confirmation() const {
         return HandshakeError::InvalidState;
     }
     return encode_handshake(
-        identity_, context_,
+        *identity_, context_,
         {HandshakeKind::Confirm, role_, receive_limit_, nonce_, peer_hello_->nonce});
 }
 

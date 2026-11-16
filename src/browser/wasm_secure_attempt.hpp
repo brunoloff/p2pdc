@@ -33,7 +33,7 @@ class WasmSecureAttempt final : public ReliableSink,
     void report(AttemptFailure reason);
     void defer_failure();
     unsigned id_;
-    Identity identity_;
+    std::shared_ptr<const Identity> identity_;
     RecipientKeyPair box_;
     std::unique_ptr<SecureAttempt> attempt_;
     bool active_ = true;

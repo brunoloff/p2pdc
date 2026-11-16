@@ -1,4 +1,5 @@
 #include "../src/security/handshake_gate.hpp"
+#include "borrowed.hpp"
 
 #include <emscripten.h>
 
@@ -59,10 +60,10 @@ struct Pair {
         auto right_context = context();
         if (mismatch)
             right_context.answer_hash[0] ^= std::byte{1};
-        a = std::make_unique<HandshakeGate>(left_id, context(), HandshakeRole::Offerer, 100, 200,
-                                            left, callbacks());
-        b = std::make_unique<HandshakeGate>(right_id, right_context, HandshakeRole::Answerer, 80,
-                                            200, right, callbacks());
+        a = std::make_unique<HandshakeGate>(borrowed(left_id), context(), HandshakeRole::Offerer,
+                                            100, 200, left, callbacks());
+        b = std::make_unique<HandshakeGate>(borrowed(right_id), right_context,
+                                            HandshakeRole::Answerer, 80, 200, right, callbacks());
     }
     void deliver() {
         for (int count = 0; count < 16 && (!left.sent.empty() || !right.sent.empty()); ++count) {

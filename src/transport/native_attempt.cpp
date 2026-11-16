@@ -148,7 +148,7 @@ void NativeAttempt::Impl::activate() {
             return;
         try {
             gate = std::make_unique<HandshakeGate>(
-                *config.identity, *context, config.binding.role, config.application_limit,
+                config.identity, *context, config.binding.role, config.application_limit,
                 config.gate_transport_limit, *this, gate_callbacks());
             status = NativeAttemptState::Authenticating;
         } catch (const std::exception &) {

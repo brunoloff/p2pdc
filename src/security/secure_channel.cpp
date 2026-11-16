@@ -38,15 +38,19 @@ SecureFailure map_failure(GateError reason) {
 }
 } // namespace
 
-SecureChannel::SecureChannel(const AsyncSignaling &signaling, const Identity &identity,
-                             HandshakeRole role, std::uint32_t receive_limit,
-                             ReliableChannelLimits limits, MemoryBudget budget, ReliableSink &sink,
-                             Executor executor, SecureChannelCallbacks callbacks)
-    : signaling_(signaling), identity_(identity), role_(role), receive_limit_(receive_limit),
-      transport_limit_(limits.frames.max_message_size), callbacks_(std::move(callbacks)),
+SecureChannel::SecureChannel(const AsyncSignaling &signaling,
+                             std::shared_ptr<const Identity> identity, HandshakeRole role,
+                             std::uint32_t receive_limit, ReliableChannelLimits limits,
+                             MemoryBudget budget, ReliableSink &sink, Executor executor,
+                             SecureChannelCallbacks callbacks)
+    : signaling_(signaling), identity_(std::move(identity)), role_(role),
+      receive_limit_(receive_limit), transport_limit_(limits.frames.max_message_size),
+      callbacks_(std::move(callbacks)),
       channel_(checked_limits(limits, receive_limit, callbacks_), std::move(budget), sink,
                std::move(executor), channel_callbacks()),
       transport_(channel_) {
+    if (!identity_)
+        throw std::invalid_argument("secure channel requires an identity");
     if (role != HandshakeRole::Offerer && role != HandshakeRole::Answerer)
         throw std::invalid_argument("invalid handshake role");
     channel_.set_receive_limit(1 + handshake_record_size);
@@ -87,7 +91,7 @@ bool SecureChannel::start() {
         return false;
     const auto expected =
         role_ == HandshakeRole::Offerer ? context->offerer_key : context->answerer_key;
-    if (identity_.public_key() != expected) {
+    if (identity_->public_key() != expected) {
         fail(SecureFailure::Protocol);
         return false;
     }

@@ -8,9 +8,11 @@
 
 namespace p2pdc::detail {
 namespace {
-AsyncSignalingBinding checked_binding(AsyncSignalingBinding binding, const Identity &identity,
+AsyncSignalingBinding checked_binding(AsyncSignalingBinding binding,
+                                      const std::shared_ptr<const Identity> &identity,
                                       const RecipientKeyPair &box) {
-    if (binding.local.signing_key != identity.public_key() || binding.local_box != box.public_key())
+    if (!identity || binding.local.signing_key != identity->public_key() ||
+        binding.local_box != box.public_key())
         throw std::invalid_argument("local identity does not match signaling binding");
     return binding;
 }
@@ -37,17 +39,17 @@ SecureAttempt::Secret::Secret(ByteView value) {
 SecureAttempt::Secret::~Secret() { sodium_memzero(bytes.data(), bytes.size()); }
 
 SecureAttempt::SecureAttempt(AsyncSignalingBinding binding, ByteView capability,
-                             const Identity &identity, const RecipientKeyPair &local_box,
-                             CandidateLimits candidate_limits, MemoryBudget budget,
-                             ReliableChannelLimits channel_limits, std::uint32_t receive_limit,
-                             ReliableSink &sink, Executor executor,
+                             std::shared_ptr<const Identity> identity,
+                             const RecipientKeyPair &local_box, CandidateLimits candidate_limits,
+                             MemoryBudget budget, ReliableChannelLimits channel_limits,
+                             std::uint32_t receive_limit, ReliableSink &sink, Executor executor,
                              SecureAttemptCallbacks callbacks)
-    : identity_(identity), local_box_(local_box), capability_(capability),
+    : identity_(std::move(identity)), local_box_(local_box), capability_(capability),
       callbacks_(std::move(callbacks)),
-      signaling_(checked_binding(binding, identity, local_box), capability_.bytes, candidate_limits,
-                 budget, 65536, 63, signaling_callbacks()),
-      channel_(signaling_, identity, binding.role, receive_limit, channel_limits, std::move(budget),
-               sink, std::move(executor), channel_callbacks()) {
+      signaling_(checked_binding(binding, identity_, local_box), capability_.bytes,
+                 candidate_limits, budget, 65536, 63, signaling_callbacks()),
+      channel_(signaling_, identity_, binding.role, receive_limit, channel_limits,
+               std::move(budget), sink, std::move(executor), channel_callbacks()) {
     if (!callbacks_.on_ready || !callbacks_.on_message || !callbacks_.on_writable ||
         !callbacks_.on_failure)
         throw std::invalid_argument("secure attempt requires callbacks");
@@ -100,14 +102,14 @@ FlowResult SecureAttempt::local_description(ByteView sdp, std::uint64_t issued,
     if (stopped_)
         return FlowResult::Closed;
     return track(
-        signaling_.local_description(identity_, capability_.bytes, sdp, issued, expiry, policy));
+        signaling_.local_description(*identity_, capability_.bytes, sdp, issued, expiry, policy));
 }
 FlowResult SecureAttempt::local_candidate(CandidateView candidate, std::uint64_t issued,
                                           std::uint64_t expiry, SignalingPolicy policy) {
     if (stopped_)
         return FlowResult::Closed;
-    return track(signaling_.local_candidate(identity_, capability_.bytes, candidate, issued, expiry,
-                                            policy));
+    return track(signaling_.local_candidate(*identity_, capability_.bytes, candidate, issued,
+                                            expiry, policy));
 }
 FlowResult SecureAttempt::receive_signaling(ByteView wire, SignalingPolicy policy) {
     if (stopped_)

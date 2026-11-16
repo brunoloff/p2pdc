@@ -31,11 +31,12 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
     bool activated = false;
     bool stopped = false;
 
-    Impl(const Identity &identity, HandshakeContext context, HandshakeRole role,
+    Impl(std::shared_ptr<const Identity> identity, HandshakeContext context, HandshakeRole role,
          std::uint32_t limit, HandshakeTransport &link, HandshakeGateCallbacks handlers,
          std::function<void()> before_verify)
-        : exchange(identity, std::move(context), role, fresh_nonce(), limit), transport(link),
-          callbacks(std::move(handlers)), before_control_verify(std::move(before_verify)) {}
+        : exchange(std::move(identity), std::move(context), role, fresh_nonce(), limit),
+          transport(link), callbacks(std::move(handlers)),
+          before_control_verify(std::move(before_verify)) {}
 
     void stop() {
         stopped = true;
@@ -174,17 +175,19 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
     }
 };
 
-HandshakeGate::HandshakeGate(const Identity &identity, HandshakeContext context, HandshakeRole role,
-                             std::uint32_t receive_limit, std::size_t transport_message_limit,
-                             HandshakeTransport &transport, HandshakeGateCallbacks callbacks,
+HandshakeGate::HandshakeGate(std::shared_ptr<const Identity> identity, HandshakeContext context,
+                             HandshakeRole role, std::uint32_t receive_limit,
+                             std::size_t transport_message_limit, HandshakeTransport &transport,
+                             HandshakeGateCallbacks callbacks,
                              std::function<void()> before_control_verify) {
     if (!callbacks.on_ready || !callbacks.on_message || !callbacks.on_writable ||
         !callbacks.on_error || transport_message_limit < 1 + handshake_record_size ||
         receive_limit > transport_message_limit - 1) {
         throw std::invalid_argument("invalid handshake gate limits or callbacks");
     }
-    impl_ = std::make_shared<Impl>(identity, std::move(context), role, receive_limit, transport,
-                                   std::move(callbacks), std::move(before_control_verify));
+    impl_ =
+        std::make_shared<Impl>(std::move(identity), std::move(context), role, receive_limit,
+                               transport, std::move(callbacks), std::move(before_control_verify));
     impl_->transport_limit = transport_message_limit;
     transport.limit_receive(1 + handshake_record_size);
 }

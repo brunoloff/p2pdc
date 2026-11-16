@@ -29,7 +29,7 @@ void BrowserSecureAttemptImpl::initialize(MemoryBudget budget) {
     const auto limit = std::max<std::uint32_t>(262145, config.max_message_bytes + 1);
     const ReliableChannelLimits limits{
         {limit, 1024}, std::max<std::size_t>(2097152, limit), 32, 524288, 4};
-    attempt = std::make_unique<SecureAttempt>(config.binding, *config.capability, *config.identity,
+    attempt = std::make_unique<SecureAttempt>(config.binding, *config.capability, config.identity,
                                               *config.recipient, CandidateLimits{4096, 256, 4361},
                                               std::move(budget), limits, config.max_message_bytes,
                                               *this, guarded_executor(), secure_callbacks());

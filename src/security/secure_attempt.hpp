@@ -22,11 +22,11 @@ struct SecureAttemptCallbacks {
 // deadlines via timeout(). Application sends and messages pass through the gate.
 class SecureAttempt final {
   public:
-    SecureAttempt(AsyncSignalingBinding binding, ByteView capability, const Identity &identity,
-                  const RecipientKeyPair &local_box, CandidateLimits candidate_limits,
-                  MemoryBudget budget, ReliableChannelLimits channel_limits,
-                  std::uint32_t receive_limit, ReliableSink &sink, Executor executor,
-                  SecureAttemptCallbacks callbacks);
+    SecureAttempt(AsyncSignalingBinding binding, ByteView capability,
+                  std::shared_ptr<const Identity> identity, const RecipientKeyPair &local_box,
+                  CandidateLimits candidate_limits, MemoryBudget budget,
+                  ReliableChannelLimits channel_limits, std::uint32_t receive_limit,
+                  ReliableSink &sink, Executor executor, SecureAttemptCallbacks callbacks);
     ~SecureAttempt();
     SecureAttempt(const SecureAttempt &) = delete;
     SecureAttempt &operator=(const SecureAttempt &) = delete;
@@ -59,7 +59,7 @@ class SecureAttempt final {
     void fail(AttemptFailure reason);
     [[nodiscard]] SignalingFlowCallbacks signaling_callbacks();
     [[nodiscard]] SecureChannelCallbacks channel_callbacks();
-    const Identity &identity_;
+    std::shared_ptr<const Identity> identity_;
     const RecipientKeyPair &local_box_;
     Secret capability_;
     SecureAttemptCallbacks callbacks_;

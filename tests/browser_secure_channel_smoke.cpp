@@ -1,4 +1,5 @@
 #include "../src/security/secure_attempt.hpp"
+#include "borrowed.hpp"
 
 #include <deque>
 
@@ -95,10 +96,10 @@ bool secure_channel_smoke() {
                                    {std::byte{3}},
                                    HandshakeRole::Answerer};
     const ReliableChannelLimits limits{{201, 64}, 4096, 16, 256, 4};
-    SecureAttempt a(ab, f.capability, f.a, f.box_a, {128, 32, 256}, MemoryBudget(8192), limits, 100,
-                    f.sink_a, f.loop.executor(), f.attempts(f.from_a));
-    SecureAttempt b(ba, f.capability, f.b, f.box_b, {128, 32, 256}, MemoryBudget(8192), limits, 100,
-                    f.sink_b, f.loop.executor(), f.attempts(f.from_b));
+    SecureAttempt a(ab, f.capability, borrowed(f.a), f.box_a, {128, 32, 256}, MemoryBudget(8192),
+                    limits, 100, f.sink_a, f.loop.executor(), f.attempts(f.from_a));
+    SecureAttempt b(ba, f.capability, borrowed(f.b), f.box_b, {128, 32, 256}, MemoryBudget(8192),
+                    limits, 100, f.sink_b, f.loop.executor(), f.attempts(f.from_b));
     if (!accepted(a.local_description(Bytes{std::byte{1}}, 100, 150, f.policy)) ||
         !accepted(b.receive_signaling(f.from_a.at(0), f.policy)) ||
         !accepted(b.description_applied(true)) ||

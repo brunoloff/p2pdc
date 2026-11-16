@@ -1,4 +1,5 @@
 #include "../src/security/secure_channel.hpp"
+#include "borrowed.hpp"
 
 #include <gtest/gtest.h>
 
@@ -100,12 +101,12 @@ struct Pair {
     void create() {
         signals.create();
         ReliableChannelLimits limits{{201, 64}, 4096, 16, 256, 4};
-        a = std::make_unique<SecureChannel>(*signals.left, signals.a, HandshakeRole::Offerer, 100,
-                                            limits, MemoryBudget(8192), a_sink, loop.executor(),
-                                            callbacks());
-        b = std::make_unique<SecureChannel>(*signals.right, signals.b, HandshakeRole::Answerer, 100,
-                                            limits, MemoryBudget(8192), b_sink, loop.executor(),
-                                            callbacks());
+        a = std::make_unique<SecureChannel>(*signals.left, borrowed(signals.a),
+                                            HandshakeRole::Offerer, 100, limits, MemoryBudget(8192),
+                                            a_sink, loop.executor(), callbacks());
+        b = std::make_unique<SecureChannel>(
+            *signals.right, borrowed(signals.b), HandshakeRole::Answerer, 100, limits,
+            MemoryBudget(8192), b_sink, loop.executor(), callbacks());
     }
     void transfer() {
         for (int count = 0; count < 100; ++count) {
@@ -193,16 +194,17 @@ TEST(SecureChannel, RejectsIdentityAndInvalidConfiguration) {
     pair.create();
     pair.signals.install();
     ReliableChannelLimits limits{{201, 64}, 4096, 16, 256, 4};
-    EXPECT_THROW(
-        (SecureChannel{*pair.signals.left, pair.signals.a, HandshakeRole::Offerer, 201, limits,
-                       MemoryBudget(8192), pair.a_sink, pair.loop.executor(), pair.callbacks()}),
-        std::invalid_argument);
-    EXPECT_THROW(
-        (SecureChannel{*pair.signals.left, pair.signals.a, HandshakeRole::Offerer, 0, limits,
-                       MemoryBudget(8192), pair.a_sink, pair.loop.executor(), pair.callbacks()}),
-        std::invalid_argument);
-    SecureChannel wrong(*pair.signals.left, pair.signals.b, HandshakeRole::Offerer, 100, limits,
-                        MemoryBudget(8192), pair.a_sink, pair.loop.executor(), pair.callbacks());
+    EXPECT_THROW((SecureChannel{*pair.signals.left, borrowed(pair.signals.a),
+                                HandshakeRole::Offerer, 201, limits, MemoryBudget(8192),
+                                pair.a_sink, pair.loop.executor(), pair.callbacks()}),
+                 std::invalid_argument);
+    EXPECT_THROW((SecureChannel{*pair.signals.left, borrowed(pair.signals.a),
+                                HandshakeRole::Offerer, 0, limits, MemoryBudget(8192), pair.a_sink,
+                                pair.loop.executor(), pair.callbacks()}),
+                 std::invalid_argument);
+    SecureChannel wrong(*pair.signals.left, borrowed(pair.signals.b), HandshakeRole::Offerer, 100,
+                        limits, MemoryBudget(8192), pair.a_sink, pair.loop.executor(),
+                        pair.callbacks());
     EXPECT_FALSE(wrong.start());
     ASSERT_EQ(pair.errors.size(), 1U);
     EXPECT_EQ(pair.errors[0], SecureFailure::Protocol);

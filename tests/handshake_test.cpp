@@ -1,3 +1,4 @@
+#include "borrowed.hpp"
 #include "p2pdc/handshake_exchange.h"
 
 #include <gtest/gtest.h>
@@ -83,8 +84,10 @@ TEST(Handshake, ContextHashesAndNoncesValidateInputs) {
 
 TEST(Handshake, TwoSidedChallengeAndConfirmationNegotiatesMinimum) {
     Fixture f;
-    HandshakeExchange a(f.offerer, f.context(), HandshakeRole::Offerer, {std::byte{7}}, 100);
-    HandshakeExchange b(f.answerer, f.context(), HandshakeRole::Answerer, {std::byte{8}}, 80);
+    HandshakeExchange a(borrowed(f.offerer), f.context(), HandshakeRole::Offerer, {std::byte{7}},
+                        100);
+    HandshakeExchange b(borrowed(f.answerer), f.context(), HandshakeRole::Answerer, {std::byte{8}},
+                        80);
     const auto hello_a = std::get<Bytes>(a.hello());
     const auto hello_b = std::get<Bytes>(b.hello());
     EXPECT_TRUE(std::holds_alternative<std::monostate>(a.mark_hello_sent()));
@@ -109,7 +112,8 @@ TEST(Handshake, TwoSidedChallengeAndConfirmationNegotiatesMinimum) {
 
 TEST(Handshake, RejectsWrongChallengeAndPrematureTransitions) {
     Fixture f;
-    HandshakeExchange a(f.offerer, f.context(), HandshakeRole::Offerer, {std::byte{7}}, 100);
+    HandshakeExchange a(borrowed(f.offerer), f.context(), HandshakeRole::Offerer, {std::byte{7}},
+                        100);
     EXPECT_EQ(std::get<HandshakeError>(a.confirmation()), HandshakeError::InvalidState);
     EXPECT_EQ(std::get<HandshakeError>(a.mark_confirmation_sent()), HandshakeError::InvalidState);
     EXPECT_FALSE(a.message_limit());
@@ -126,14 +130,29 @@ TEST(Handshake, RejectsWrongChallengeAndPrematureTransitions) {
     const auto old_confirmation = std::get<Bytes>(encode_handshake(
         f.answerer, f.context(),
         {HandshakeKind::Confirm, HandshakeRole::Answerer, 80, {std::byte{8}}, {std::byte{7}}}));
-    HandshakeExchange fresh(f.offerer, f.context(), HandshakeRole::Offerer, {std::byte{10}}, 100);
+    HandshakeExchange fresh(borrowed(f.offerer), f.context(), HandshakeRole::Offerer,
+                            {std::byte{10}}, 100);
     EXPECT_TRUE(std::holds_alternative<std::monostate>(fresh.mark_hello_sent()));
     EXPECT_EQ(std::get<HandshakeError>(fresh.receive(old_confirmation)),
               HandshakeError::InvalidState);
     EXPECT_TRUE(std::holds_alternative<std::monostate>(fresh.receive(hello)));
     EXPECT_EQ(std::get<HandshakeError>(fresh.receive(old_confirmation)),
               HandshakeError::InvalidState);
-    EXPECT_THROW((HandshakeExchange{f.answerer, f.context(), HandshakeRole::Offerer,
+    EXPECT_THROW((HandshakeExchange{borrowed(f.answerer), f.context(), HandshakeRole::Offerer,
                                     HandshakeNonce{std::byte{7}}, 1}),
                  std::invalid_argument);
+}
+
+TEST(HandshakeExchange, KeepsItsIdentityAliveAfterTheCallerReleasesIt) {
+    Fixture f;
+    auto owned = std::make_shared<const Identity>(
+        std::get<Identity>(Identity::import_seed(Bytes(32, std::byte{1}))));
+    std::weak_ptr<const Identity> watch = owned;
+    HandshakeExchange exchange(std::move(owned), f.context(), HandshakeRole::Offerer,
+                               {std::byte{7}}, 100);
+    EXPECT_FALSE(watch.expired());
+    EXPECT_TRUE(std::holds_alternative<Bytes>(exchange.hello()));
+    EXPECT_THROW(
+        (HandshakeExchange{nullptr, f.context(), HandshakeRole::Offerer, {std::byte{7}}, 100}),
+        std::invalid_argument);
 }

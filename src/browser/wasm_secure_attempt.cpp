@@ -84,7 +84,8 @@ void post(std::function<void()> callback) {
 } // namespace
 
 WasmSecureAttempt::WasmSecureAttempt(unsigned id, Identity identity, RecipientKeyPair box)
-    : id_(id), identity_(std::move(identity)), box_(std::move(box)) {}
+    : id_(id), identity_(std::make_shared<const Identity>(std::move(identity))),
+      box_(std::move(box)) {}
 WasmSecureAttempt::~WasmSecureAttempt() { close(); }
 std::shared_ptr<WasmSecureAttempt> WasmSecureAttempt::create(unsigned id, ByteView config) {
     if (!id || config.size() != wasm_attempt_config_size)
@@ -104,7 +105,7 @@ void WasmSecureAttempt::initialize(ByteView config) {
     const auto role = std::to_integer<unsigned>(config[208]);
     if (role != 1 && role != 2)
         throw std::invalid_argument("invalid role");
-    AsyncSignalingBinding binding{{identity_.public_key(), array<16>(config, 160)},
+    AsyncSignalingBinding binding{{identity_->public_key(), array<16>(config, 160)},
                                   {array<32>(config, 96), array<16>(config, 176)},
                                   box_.public_key(),
                                   array<32>(config, 128),

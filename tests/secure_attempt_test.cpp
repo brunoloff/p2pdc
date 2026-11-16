@@ -1,4 +1,5 @@
 #include "../src/security/secure_attempt.hpp"
+#include "borrowed.hpp"
 
 #include <gtest/gtest.h>
 
@@ -80,7 +81,7 @@ struct Pair {
     std::unique_ptr<SecureAttempt> make(bool first) {
         const ReliableChannelLimits limits{{201, 64}, 4096, 16, 256, 4};
         return std::make_unique<SecureAttempt>(
-            binding(first), capability, first ? a : b, first ? box_a : box_b,
+            binding(first), capability, borrowed(first ? a : b), first ? box_a : box_b,
             CandidateLimits{128, 32, 256}, MemoryBudget(8192), limits, 100, first ? sink_a : sink_b,
             loop.executor(), callbacks(first ? a_wire : b_wire));
     }
@@ -151,7 +152,7 @@ TEST(SecureAttempt, InvalidIdentityAndCapabilityAreRejected) {
     const ReliableChannelLimits limits{{201, 64}, 4096, 16, 256, 4};
     EXPECT_THROW((SecureAttempt{pair.binding(true),
                                 pair.capability,
-                                pair.b,
+                                borrowed(pair.b),
                                 pair.box_a,
                                 {128, 32, 256},
                                 MemoryBudget(8192),
@@ -163,7 +164,7 @@ TEST(SecureAttempt, InvalidIdentityAndCapabilityAreRejected) {
                  std::invalid_argument);
     EXPECT_THROW((SecureAttempt{pair.binding(true),
                                 Bytes(31),
-                                pair.a,
+                                borrowed(pair.a),
                                 pair.box_a,
                                 {128, 32, 256},
                                 MemoryBudget(8192),
@@ -175,7 +176,7 @@ TEST(SecureAttempt, InvalidIdentityAndCapabilityAreRejected) {
                  std::invalid_argument);
     EXPECT_THROW((SecureAttempt{pair.binding(true),
                                 pair.capability,
-                                pair.a,
+                                borrowed(pair.a),
                                 pair.box_b,
                                 {128, 32, 256},
                                 MemoryBudget(8192),

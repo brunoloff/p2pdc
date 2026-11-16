@@ -1,4 +1,5 @@
 #include "../src/security/signaling_session.hpp"
+#include "borrowed.hpp"
 #include "p2pdc/handshake_exchange.h"
 
 #include <gtest/gtest.h>
@@ -65,8 +66,8 @@ TEST(SignalingSession, VerifiesOutOfOrderCandidateAndBuildsSameHandshakeContext)
     EXPECT_EQ(a.offer_hash, b.offer_hash);
     EXPECT_EQ(a.answer_hash, b.answer_hash);
     EXPECT_EQ(a.group, b.group);
-    HandshakeExchange first(f.a, a, HandshakeRole::Offerer, {std::byte{7}}, 100);
-    HandshakeExchange second(f.b, b, HandshakeRole::Answerer, {std::byte{8}}, 80);
+    HandshakeExchange first(borrowed(f.a), a, HandshakeRole::Offerer, {std::byte{7}}, 100);
+    HandshakeExchange second(borrowed(f.b), b, HandshakeRole::Answerer, {std::byte{8}}, 80);
     EXPECT_TRUE(
         std::holds_alternative<std::monostate>(second.receive(std::get<Bytes>(first.hello()))));
 }

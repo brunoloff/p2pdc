@@ -28,7 +28,8 @@ struct HandshakeGateCallbacks {
 
 // Internal gate. Context MUST come from authorized, verified signaling and hash
 // the exact offer/answer installed in the transport with fingerprint checks on.
-// It does not verify that prerequisite. Identity and transport outlive the gate.
+// It does not verify that prerequisite. The gate shares ownership of the
+// identity; the transport must outlive the gate.
 // Methods and callbacks share one serialized context; backend events are already
 // posted asynchronously. User callbacks and transport operations do not throw.
 // Caller enforces the handshake deadline and calls timeout() when it expires.
@@ -36,9 +37,10 @@ struct HandshakeGateCallbacks {
 // The optional before_control_verify test hook may throw bad_alloc or length_error.
 class HandshakeGate {
   public:
-    HandshakeGate(const Identity &identity, HandshakeContext context, HandshakeRole role,
-                  std::uint32_t receive_limit, std::size_t transport_message_limit,
-                  HandshakeTransport &transport, HandshakeGateCallbacks callbacks,
+    HandshakeGate(std::shared_ptr<const Identity> identity, HandshakeContext context,
+                  HandshakeRole role, std::uint32_t receive_limit,
+                  std::size_t transport_message_limit, HandshakeTransport &transport,
+                  HandshakeGateCallbacks callbacks,
                   std::function<void()> before_control_verify = {});
     ~HandshakeGate();
     HandshakeGate(const HandshakeGate &) = delete;

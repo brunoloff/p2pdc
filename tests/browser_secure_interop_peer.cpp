@@ -1,5 +1,6 @@
 #include "../src/security/secure_attempt.hpp"
 #include "../src/transport/native_transport.hpp"
+#include "borrowed.hpp"
 
 #include <poll.h>
 #include <unistd.h>
@@ -264,7 +265,7 @@ void Peer::create() {
                                                   loop.executor(), transport_callbacks(),
                                                   NativeReceiveLimits{budget, 1048576, 128, 1024});
     attempt = std::make_unique<SecureAttempt>(
-        binding, capability, identity, box, CandidateLimits{4096, 256, 4361}, budget,
+        binding, capability, borrowed(identity), box, CandidateLimits{4096, 256, 4361}, budget,
         ReliableChannelLimits{{262145, 1024}, 2097152, 32, 524288, 4}, 262144, *this,
         loop.executor(), attempt_callbacks());
     transport->start_offer();

@@ -22,9 +22,10 @@ struct SecureChannelCallbacks {
 // handshake deadline using timeout(). An incoming frame before start fails closed.
 class SecureChannel final {
   public:
-    SecureChannel(const AsyncSignaling &signaling, const Identity &identity, HandshakeRole role,
-                  std::uint32_t receive_limit, ReliableChannelLimits limits, MemoryBudget budget,
-                  ReliableSink &sink, Executor executor, SecureChannelCallbacks callbacks);
+    SecureChannel(const AsyncSignaling &signaling, std::shared_ptr<const Identity> identity,
+                  HandshakeRole role, std::uint32_t receive_limit, ReliableChannelLimits limits,
+                  MemoryBudget budget, ReliableSink &sink, Executor executor,
+                  SecureChannelCallbacks callbacks);
     ~SecureChannel();
     SecureChannel(const SecureChannel &) = delete;
     SecureChannel &operator=(const SecureChannel &) = delete;
@@ -52,7 +53,7 @@ class SecureChannel final {
     [[nodiscard]] ReliableChannelCallbacks channel_callbacks();
     [[nodiscard]] HandshakeGateCallbacks gate_callbacks();
     const AsyncSignaling &signaling_;
-    const Identity &identity_;
+    std::shared_ptr<const Identity> identity_;
     HandshakeRole role_;
     std::uint32_t receive_limit_;
     std::size_t transport_limit_;

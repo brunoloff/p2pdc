@@ -3,6 +3,7 @@
 #include "../src/security/signaling_session.hpp"
 #include "../src/transport/native_reliable_link.hpp"
 #include "../src/transport/native_signaling.hpp"
+#include "borrowed.hpp"
 
 #include <gtest/gtest.h>
 
@@ -117,7 +118,7 @@ struct Pair {
         auto &gate = first ? left_gate : right_gate;
         auto &adapter = first ? left_adapter : right_adapter;
         if (!gate) {
-            gate = std::make_unique<HandshakeGate>(first ? a : b, context(first),
+            gate = std::make_unique<HandshakeGate>(borrowed(first ? a : b), context(first),
                                                    first ? HandshakeRole::Offerer
                                                          : HandshakeRole::Answerer,
                                                    1024, 4096, adapter, gate_callbacks());

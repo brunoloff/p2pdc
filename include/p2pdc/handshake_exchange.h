@@ -2,18 +2,20 @@
 
 #include "p2pdc/handshake.h"
 
+#include <memory>
+
 #include <optional>
 
 namespace p2pdc {
 
-// Single serialized connection attempt. The identity must outlive the exchange.
+// Single serialized connection attempt. The exchange shares ownership of the identity.
 // The caller must use a fresh unpredictable nonce for every connection attempt.
 // send markers may be called only after the reliable transport accepted the
 // corresponding encoded record. Any protocol error must terminate the connection.
 class HandshakeExchange {
   public:
-    HandshakeExchange(const Identity &identity, HandshakeContext context, HandshakeRole role,
-                      HandshakeNonce nonce, std::uint32_t receive_limit);
+    HandshakeExchange(std::shared_ptr<const Identity> identity, HandshakeContext context,
+                      HandshakeRole role, HandshakeNonce nonce, std::uint32_t receive_limit);
     HandshakeExchange(const HandshakeExchange &) = delete;
     HandshakeExchange &operator=(const HandshakeExchange &) = delete;
     HandshakeExchange(HandshakeExchange &&) = delete;
@@ -27,7 +29,7 @@ class HandshakeExchange {
     [[nodiscard]] std::optional<std::uint32_t> message_limit() const;
 
   private:
-    const Identity &identity_;
+    std::shared_ptr<const Identity> identity_;
     HandshakeContext context_;
     HandshakeRole role_;
     HandshakeNonce nonce_;

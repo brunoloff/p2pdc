@@ -2,6 +2,7 @@
 #include "../src/discovery/native_store.hpp"
 #include "../src/security/handshake_gate.hpp"
 #include "../src/transport/native_signaling.hpp"
+#include "borrowed.hpp"
 
 #include <gtest/gtest.h>
 
@@ -112,7 +113,7 @@ struct Peer {
             return;
         }
         gate = std::make_unique<HandshakeGate>(
-            identity, *context, role, 1024, 4096, gate_transport,
+            borrowed(identity), *context, role, 1024, 4096, gate_transport,
             HandshakeGateCallbacks{[this](std::uint32_t) { ready = true; },
                                    [this](Bytes value) { messages.push_back(std::move(value)); },
                                    [] {}, [this](GateError) { ++failures; }});
