@@ -360,7 +360,9 @@ Native `WatchOptions` and `AnnounceOptions` default to
 `DiscoveryProtocol::RotatingKeysV2`. Both handles for a connection must use the
 same protocol; a mismatch is rejected. Browser discovery and `BrowserNode` also
 default to rotating keys; the node's announcement handles inherit its watch's
-choice and reject conflicting overrides. For compatibility, native callers can
+choice and reject conflicting overrides. `FixedKeyV1` is deprecated: its single,
+permanent DHT key lets anyone who learns it observe the group indefinitely. For
+compatibility with older peers only, native callers can
 select `FixedKeyV1` on both handles and browser callers can set
 `watch: { windowed: false }` on the node. The protocols use different keys and
 cannot discover one another. A rotating
@@ -370,7 +372,7 @@ per window. Local native/browser tests exchanged authenticated data in both
 connection directions using rotating discovery and an isolated OpenDHT proxy.
 An internal scheduled cycle can drive a watcher, lease, or both with an injected
 timer scheduler, including bounded retry delays. Public announcement leases allow
-at most 32 publication attempts per fixed-key lease or rotating-key window. A
+at most 32 publication attempts per 120-second window in either protocol. A
 node admits at most 16 valid announcement attempts in any rolling five minutes;
 fixed-key announcements also have a 16-attempt node-lifetime limit. These
 per-node limits do not bound repeated node creation.

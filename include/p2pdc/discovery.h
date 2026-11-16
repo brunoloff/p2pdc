@@ -30,6 +30,9 @@ enum class WatchError {
 };
 
 // The protocols use different discovery keys and do not interoperate.
+// FixedKeyV1 is deprecated: its key never changes, so anyone who learns it can
+// observe group activity indefinitely and target that one key. It remains
+// only for interoperability with older peers; prefer RotatingKeysV2.
 enum class DiscoveryProtocol : std::uint8_t { FixedKeyV1, RotatingKeysV2 };
 
 struct WatchOptions {
