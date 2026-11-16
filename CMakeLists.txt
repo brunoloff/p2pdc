@@ -290,7 +290,7 @@ if(BUILD_TESTING)
         target_sources(p2pdc_tests PRIVATE tests/runtime_test.cpp)
     endif()
     if(P2PDC_ENABLE_SODIUM)
-        target_sources(p2pdc_tests PRIVATE tests/discovery_recovery_test.cpp tests/portable_discovery_smoke.cpp tests/portable_discovery_test.cpp tests/portable_admission_smoke.cpp tests/portable_admission_test.cpp tests/attempt_guard_test.cpp tests/security_test.cpp tests/recipient_crypto_test.cpp tests/handshake_test.cpp tests/handshake_gate_test.cpp tests/async_signaling_test.cpp tests/secure_channel_test.cpp tests/secure_attempt_test.cpp
+        target_sources(p2pdc_tests PRIVATE tests/discovery_recovery_test.cpp tests/portable_discovery_smoke.cpp tests/portable_discovery_test.cpp tests/portable_admission_smoke.cpp tests/portable_admission_test.cpp tests/attempt_guard_test.cpp tests/security_test.cpp tests/secret_bytes_test.cpp tests/recipient_crypto_test.cpp tests/handshake_test.cpp tests/handshake_gate_test.cpp tests/async_signaling_test.cpp tests/secure_channel_test.cpp tests/secure_attempt_test.cpp
             tests/signaling_test.cpp tests/signaling_session_test.cpp tests/signaling_candidate_test.cpp tests/signaling_flow_test.cpp
             tests/advertisement_test.cpp tests/advertisement_tracker_test.cpp
             tests/incoming_offer_resolver_test.cpp

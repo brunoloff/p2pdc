@@ -2,6 +2,7 @@
 
 #include "../core/deferred_events.hpp"
 #include "../core/wall_clock.hpp"
+#include "../security/secret_bytes.hpp"
 #include "native_discovery_cycle.hpp"
 
 #include <algorithm>
@@ -275,7 +276,7 @@ DiscoveryBackendResult make_public_watch(RecordStore store, DiscoveryCapability 
     validate_watch(scheduler, options, handlers);
     auto state = std::make_shared<PublicWatch>(gate, std::move(handlers));
     state->initialize(budget, options);
-    auto secret = std::make_shared<const Bytes>(capability.begin(), capability.end());
+    auto secret = make_secret_bytes(capability);
     state->set_capability(secret);
     const auto raw_records = std::clamp(options.max_peers * 4, std::size_t{64}, std::size_t{1024});
     const auto raw_bytes = raw_records * 1024;

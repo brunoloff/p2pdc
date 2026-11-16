@@ -2,6 +2,7 @@
 
 #include "../core/deferred_events.hpp"
 #include "../core/wall_clock.hpp"
+#include "../security/secret_bytes.hpp"
 #include "native_discovery_cycle.hpp"
 
 #include <iostream>
@@ -222,7 +223,7 @@ LeaseBackendResult make_public_lease(RecordStore store,
     validate_announcement(scheduler, options, handlers);
     auto state = std::make_shared<PublicLease>(gate, endpoint, std::move(handlers));
     state->initialize(budget, options);
-    auto secret = std::make_shared<const Bytes>(capability.begin(), capability.end());
+    auto secret = make_secret_bytes(capability);
     state->set_capability(secret);
     AdvertisementLeaseConfig lease{endpoint.fields,
                                    options.lifetime_seconds,

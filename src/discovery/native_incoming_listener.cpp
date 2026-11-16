@@ -1,5 +1,6 @@
 #include "native_incoming_listener.hpp"
 #include "signal_errors.hpp"
+#include "../security/secret_bytes.hpp"
 
 #include <sodium.h>
 
@@ -38,7 +39,7 @@ bool same_context(const IncomingContext &base, const IncomingContext &value, std
 }
 IncomingContext freeze_context(IncomingContext value) {
     auto identity = std::make_shared<const EndpointIdentity>(*value.local.endpoint.identity);
-    auto capability = std::make_shared<const Bytes>(*value.local.capability);
+    auto capability = make_secret_bytes(*value.local.capability);
     value.local.endpoint.identity = std::move(identity);
     value.local.capability = capability;
     value.remote.capability = std::move(capability);
