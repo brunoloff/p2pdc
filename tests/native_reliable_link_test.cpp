@@ -173,6 +173,12 @@ TEST(NativeReliableLink, PreservesReliableChannelFailureCategories) {
     EXPECT_EQ(channel_failure_category(ChannelFailure::Allocation), ConnectError::ResourceLimit);
 }
 
+TEST(NativeReliableLink, WakesItsPumpAtAQuarterOfTheHighWaterMark) {
+    RawPeerPair pair;
+    pair.create();
+    EXPECT_EQ(pair.link->writable_threshold(), 1024U);
+}
+
 TEST(NativeReliableLink, ReportsMalformedPeerFrameAsProtocolFailure) {
     RawPeerPair pair;
     pair.create();

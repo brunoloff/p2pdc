@@ -327,12 +327,12 @@ test("input limits and binary-only channel failures are enforced", async () => {
     assert.equal(transport.send(Uint8Array.of(1)), "failed");
 });
 
-test("backpressure wakes when the browser send buffer drains", async () => {
+test("backpressure wakes when the browser send buffer falls to a quarter of its limit", async () => {
     const { transport, peer, events } = setup({ maxMessageBytes: 8, maxBufferBytes: 8, maxInboundBytes: 8 });
     await transport.startOffer(); peer.connect(); await settle();
     peer.channel.bufferedAmount = 1;
     assert.equal(transport.send(new Uint8Array(8)), "backpressure");
-    assert.equal(peer.channel.bufferedAmountLowThreshold, 0);
+    assert.equal(peer.channel.bufferedAmountLowThreshold, 2);
     peer.channel.bufferedAmount = 0;
     peer.channel.onbufferedamountlow();
     await settle();

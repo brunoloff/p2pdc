@@ -27,6 +27,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
     RouteTracker tracker;
     std::atomic<bool> active{true};
     std::shared_ptr<SubmissionGate> submission_gate = std::make_shared<SubmissionGate>();
+    std::size_t writable_threshold = 0;
     bool stopped = false;
     bool offered = false;
     bool remote_description_set = false;
@@ -135,7 +136,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
             return;
         }
         channel = std::move(incoming);
-        channel->setBufferedAmountLowThreshold(0);
+        channel->setBufferedAmountLowThreshold(writable_threshold);
         channel->onOpen(backend([](Impl &self) { self.update_readiness(); }));
         channel->onClosed(
             backend([](Impl &self) { self.peer_state(rtc::PeerConnection::State::Closed); }));
@@ -341,6 +342,14 @@ NativeSendResult NativeTransport::send(ByteView bytes) {
         return NativeSendResult::Failed;
     }
 }
+
+void NativeTransport::set_writable_threshold(std::size_t bytes) {
+    impl_->writable_threshold = bytes;
+    if (impl_->channel)
+        impl_->channel->setBufferedAmountLowThreshold(bytes);
+}
+
+std::size_t NativeTransport::writable_threshold() const { return impl_->writable_threshold; }
 
 std::size_t NativeTransport::buffered_amount() const {
     return impl_->channel ? impl_->channel->bufferedAmount() : 0;

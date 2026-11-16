@@ -38,6 +38,7 @@ class NativeReliableLink {
     [[nodiscard]] ChannelSend send(ByteView message);
     // See ReliableChannel::set_receive_limit; kept across channel reconfiguration.
     void set_receive_limit(std::size_t bytes);
+    [[nodiscard]] std::size_t writable_threshold() const;
     [[nodiscard]] NativeTransportState state() const;
     [[nodiscard]] RouteInfo poll_route();
     void wake();

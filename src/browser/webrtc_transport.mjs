@@ -119,7 +119,7 @@ export class BrowserWebRtcTransport {
         }
         this.channel = channel;
         channel.binaryType = "arraybuffer";
-        channel.bufferedAmountLowThreshold = 0;
+        channel.bufferedAmountLowThreshold = Math.floor(this.limits.maxBufferBytes / 4); // refill before the buffer drains
         channel.onopen = () => this.update();
         channel.onclose = () => this.fail("data channel closed");
         channel.onerror = () => this.fail("data channel error");

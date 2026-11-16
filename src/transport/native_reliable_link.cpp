@@ -219,6 +219,9 @@ NativeReliableLink::NativeReliableLink(rtc::Configuration config, NativeRelayPol
     impl_ = std::make_shared<Impl>(executor, std::move(callbacks), limits, budget);
     impl_->transport = std::make_unique<NativeTransport>(std::move(config), policy, executor,
                                                          impl_->native_callbacks(), inbound_limits);
+    // Wake the pump at a quarter of the high-water mark so it refills the
+    // backend buffer before it drains, instead of stop-and-wait.
+    impl_->transport->set_writable_threshold(limits.backend_high_water / 4);
     impl_->channel = std::make_unique<ReliableChannel>(limits, std::move(budget), *impl_, executor,
                                                        impl_->channel_callbacks());
 }
@@ -232,6 +235,9 @@ void NativeReliableLink::add_remote_candidate(rtc::Candidate value) {
     impl_->transport->add_remote_candidate(std::move(value));
 }
 ChannelSend NativeReliableLink::send(ByteView message) { return impl_->channel->send(message); }
+std::size_t NativeReliableLink::writable_threshold() const {
+    return impl_->transport->writable_threshold();
+}
 void NativeReliableLink::set_receive_limit(std::size_t bytes) {
     impl_->receive_limit = bytes;
     impl_->channel->set_receive_limit(bytes);

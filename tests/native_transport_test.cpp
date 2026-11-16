@@ -4,8 +4,6 @@
 #include "p2pdc/reassembler.h"
 
 #include <gtest/gtest.h>
-
-#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <mutex>
@@ -382,6 +380,18 @@ TEST(NativeTransport, RepeatedBufferedSendsRemainAcceptedAndOrdered) {
         EXPECT_EQ(pair.received[index][0], static_cast<std::byte>(index & 255));
         EXPECT_EQ(pair.received[index][1], static_cast<std::byte>(index >> 8));
     }
+}
+
+TEST(NativeTransport, WritableThresholdIsStoredAndAppliedToTheChannel) {
+    Pair pair;
+    pair.create();
+    EXPECT_EQ(pair.a->writable_threshold(), 0U);
+    pair.a->set_writable_threshold(4096);
+    ASSERT_TRUE(pair.connect());
+    EXPECT_EQ(pair.a->writable_threshold(), 4096U);
+    pair.a->set_writable_threshold(8192);
+    EXPECT_EQ(pair.a->writable_threshold(), 8192U);
+    EXPECT_TRUE(pair.errors.empty());
 }
 
 TEST(NativeTransport, RejectsUnsupportedDescriptionType) {

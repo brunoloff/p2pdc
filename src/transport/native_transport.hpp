@@ -63,6 +63,10 @@ class NativeTransport {
     // Sends one backend message; fragmentation/backpressure budgets belong above.
     [[nodiscard]] NativeSendResult send(ByteView bytes);
     [[nodiscard]] std::size_t buffered_amount() const;
+    // on_writable fires when the buffered amount falls to this many bytes. The
+    // default 0 waits for a fully drained buffer (stop-and-wait).
+    void set_writable_threshold(std::size_t bytes);
+    [[nodiscard]] std::size_t writable_threshold() const;
     [[nodiscard]] std::size_t max_message_size() const;
     [[nodiscard]] NativeTransportState state() const;
     // Owner must poll periodically and after observation gaps. Polling never proves
