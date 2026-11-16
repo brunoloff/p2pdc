@@ -144,15 +144,19 @@ TEST_F(NativeIncomingListenerTest, ObservesRecordsWhileContinuingToAcceptOffers)
     EXPECT_NE(std::find(records.begin(), records.end(), offer), records.end());
     EXPECT_EQ(offers.size(), 1U);
 }
-TEST_F(NativeIncomingListenerTest, MailboxBudgetExhaustionReportsResourceLimit) {
+TEST_F(NativeIncomingListenerTest, MailboxBudgetExhaustionDropsRecordsWithoutFailing) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
     auto watch = listener(context, MemoryBudget(1));
     ASSERT_TRUE(watch);
     ASSERT_TRUE(publish(receiver, signed_seed(sender, receiver, SignalingKind::Offer)));
-    ASSERT_TRUE(loop.until([&] { return !watch->poll(); }));
-    ASSERT_EQ(errors.size(), 1U);
-    EXPECT_EQ(errors.front(), IncomingListenerError::ResourceLimit);
+    const auto deadline = std::chrono::steady_clock::now() + 300ms;
+    ASSERT_TRUE(loop.until([&] {
+        (void)watch->poll();
+        return std::chrono::steady_clock::now() >= deadline;
+    }));
+    EXPECT_TRUE(watch->poll());
+    EXPECT_TRUE(errors.empty());
     EXPECT_TRUE(offers.empty());
 }
 TEST_F(NativeIncomingListenerTest, PausedOwnerDoesNotConsumeUnpresentedOffers) {

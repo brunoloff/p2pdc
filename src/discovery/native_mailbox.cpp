@@ -28,7 +28,8 @@ struct NativeMailbox::Impl : std::enable_shared_from_this<Impl> {
          MemoryBudget budget, Executor dispatch, MailboxCallbacks handlers,
          LookupDeduplication deduplication_policy)
         : store(std::move(source)), key(address),
-          inbox(std::move(budget), limits.queued_bytes, limits.queued_records, limits.record_bytes),
+          inbox(std::move(budget), limits.queued_bytes, limits.queued_records, limits.record_bytes,
+                InboundOverflow::Drop),
           submissions(std::move(dispatch)), callbacks(std::move(handlers)),
           deduplication(deduplication_policy) {}
 
@@ -73,7 +74,8 @@ struct NativeMailbox::Impl : std::enable_shared_from_this<Impl> {
                 if (pushed.schedule_drain) {
                     schedule();
                 }
-                if (pushed.status != InboundStatus::Accepted) {
+                if (pushed.status != InboundStatus::Accepted &&
+                    pushed.status != InboundStatus::Dropped) {
                     return;
                 }
             }

@@ -124,9 +124,10 @@ TEST_F(NativeWindowedMailboxTest, DiscoveryWatchTracksLeaseAcrossWindows) {
     EXPECT_TRUE(errors.empty());
 }
 
-TEST_F(NativeWindowedMailboxTest, DiscoveryWatchReportsQueueBudgetExhaustion) {
+TEST_F(NativeWindowedMailboxTest, DiscoveryWatchDropsRecordsWhenQueueBudgetIsExhausted) {
     for (const bool windowed : {false, true}) {
         errors.clear();
+        events.clear();
         DiscoveryWatchLimits bounds{{4096, 16, 1024}, 4, 60, 5, windowed};
         auto created = NativeDiscoveryWatch::create(
             NativeStore(second, {1024, 32, 32768}), capability, bounds, MemoryBudget(1),
@@ -147,13 +148,15 @@ TEST_F(NativeWindowedMailboxTest, DiscoveryWatchReportsQueueBudgetExhaustion) {
                                 [done](bool ok) { done->set_value(ok); }));
         ASSERT_EQ(result.wait_for(10s), std::future_status::ready);
         ASSERT_TRUE(result.get());
+        const auto deadline = std::chrono::steady_clock::now() + 300ms;
         ASSERT_TRUE(loop.until([&] {
             if (watch->is_open())
                 (void)watch->tick();
-            return !errors.empty();
+            return std::chrono::steady_clock::now() >= deadline;
         }));
-        ASSERT_EQ(errors.size(), 1U);
-        EXPECT_EQ(errors.front(), DiscoveryWatchError::ResourceLimit);
+        EXPECT_TRUE(watch->is_open());
+        EXPECT_TRUE(errors.empty());
+        EXPECT_TRUE(events.empty());
         watch->close();
     }
 }

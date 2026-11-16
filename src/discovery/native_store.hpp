@@ -66,10 +66,11 @@ class NativeWatch {
 // preserves distinct IDs and conflicting payloads. Watches do not deduplicate
 // by default. Discovery may opt into deduplication by bytes regardless of ID;
 // that mode inspects at most eight times max_values per lookup or watch batch,
-// including discarded duplicates.
+// including discarded duplicates, and drops records beyond that.
 // Limits count accepted payload bytes/records, excluding backend allocations and
 // record overhead. Lookup limits are cumulative; watch limits apply per batch.
-// A limit error retains the bounded prefix and ends that lookup/watch.
+// Records over a limit are dropped and counted in StoreBatch::dropped; the
+// lookup or watch continues, so hostile publications cannot end it.
 // Caller keeps its runner reference alive and running until outstanding callbacks
 // finish and watches are canceled/destroyed, then owns shutdown/join. Adapter
 // destruction neither stops work nor joins. Submission/allocation errors on the

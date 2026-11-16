@@ -78,19 +78,20 @@ test("discovery lookup collapses identical bytes across IDs without hiding expir
 });
 
 test("discovery lookup bounds inspection even for repeated content", async () => {
-    const lines = Array.from({ length: 9 }, (_, index) => record("AQ==", String(index + 1))).join("\n");
+    const lines = [...Array.from({ length: 9 }, (_, index) => record("AQ==", String(index + 1))),
+                   record("Ag==", "10")].join("\n");
     const client = proxy(async () => response([lines]), { maxValues: 1 });
-    await assert.rejects(client.get(key, undefined, { deduplicateByContent: true }),
-        (error) => error.code === "resource_limit");
+    const values = await client.get(key, undefined, { deduplicateByContent: true });
+    assert.deepEqual(values.map((value) => [...value.bytes]), [[1]]);
 });
 
-test("default lookup accepts 512 distinct records and rejects the next", async () => {
+test("default lookup accepts 512 distinct records and drops the next", async () => {
     const lines = Array.from({ length: 513 }, (_, index) =>
         record(btoa(String.fromCharCode(index >> 8, index & 255)), String(index + 1)));
     const allowed = proxy(async () => response([lines.slice(0, 512).join("\n")]));
     assert.equal((await allowed.get(key)).length, 512);
     const exceeded = proxy(async () => response([lines.join("\n")]));
-    await assert.rejects(exceeded.get(key), (error) => error.code === "resource_limit");
+    assert.equal((await exceeded.get(key)).length, 512);
 });
 
 test("rejects malformed, noncanonical and oversized records", async () => {
@@ -99,24 +100,33 @@ test("rejects malformed, noncanonical and oversized records", async () => {
     assert.throws(() => decodeRecord(record("AB==", "1"), 4), ProxyError);
     assert.throws(() => decodeRecord(record("AA==", 4), 4), ProxyError);
     assert.throws(() => decodeRecord(record("AQI=", "1"), 1), ProxyError);
-    const tooLong = proxy(async () => response([`${"x".repeat(5000)}\n`]), { maxValueBytes: 1 });
-    await assert.rejects(tooLong.get(key), (error) => error.code === "resource_limit");
+    const tooLong = proxy(async () => response([`${"x".repeat(5000)}\n${record("AQ==")}\n`]), { maxValueBytes: 1 });
+    assert.deepEqual((await tooLong.get(key)).map((value) => [...value.bytes]), [[1]]);
+    const split = proxy(async () => response(["x".repeat(3000), "x".repeat(3000), `\n${record("Ag==")}`]),
+                        { maxValueBytes: 1 });
+    assert.deepEqual((await split.get(key)).map((value) => [...value.bytes]), [[2]]);
+    const oversized = proxy(async () => response([`${record("AQI=", "1")}\n${record("Aw==", "2")}\n`]),
+                            { maxValueBytes: 1 });
+    assert.deepEqual((await oversized.get(key)).map((value) => [...value.bytes]), [[3]]);
     const badUtf8 = proxy(async () => response([Uint8Array.of(0xff, 10)]));
     await assert.rejects(badUtf8.get(key), (error) => error.code === "invalid_record");
 });
 
-test("lookup enforces record and total byte budgets", async () => {
+test("lookup enforces record and total byte budgets by dropping surplus records", async () => {
     const records = `${record("AQ==", "1")}\n${record("Ag==", "2")}\n`;
     const count = proxy(async () => response([records]), { maxValues: 1 });
-    await assert.rejects(count.get(key), (error) => error.code === "resource_limit");
+    assert.deepEqual((await count.get(key)).map((value) => [...value.bytes]), [[1]]);
     const total = proxy(async () => response([records]), { maxTotalBytes: 1 });
-    await assert.rejects(total.get(key), (error) => error.code === "resource_limit");
+    assert.deepEqual((await total.get(key)).map((value) => [...value.bytes]), [[1]]);
 });
 
-test("listen rejects a record larger than its byte budget", async () => {
-    const client = proxy(async () => response([`${record("AQI=")}\n`]), { maxTotalBytes: 1 });
-    await assert.rejects(client.listen(key, () => { assert.fail("oversized record delivered"); }).done,
-                         (error) => error.code === "resource_limit");
+test("listen drops a record larger than its byte budget and keeps streaming", async () => {
+    const values = [];
+    const client = proxy(async () => response([`${record("AQI=")}\n${"x".repeat(50000)}\n${record("Aw==")}\n`]),
+                         { maxTotalBytes: 1 });
+    await assert.rejects(client.listen(key, (value) => values.push([...value.bytes])).done,
+                         (error) => error.code === "stream_closed");
+    assert.deepEqual(values, [[3]]);
 });
 
 test("listen preserves expiration and stops deliveries after close", async () => {

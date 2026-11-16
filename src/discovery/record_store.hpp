@@ -24,10 +24,14 @@ struct StoreLimits {
     std::size_t max_values;
     std::size_t max_total_bytes;
 };
+// Records are untrusted. Values above max_value_bytes, and values beyond the
+// count or byte limits, are dropped and counted rather than ending the
+// operation; error is reserved for local or backend failures.
 struct StoreBatch {
     std::vector<Bytes> values;
     std::optional<StoreError> error;
     bool expired = false;
+    std::size_t dropped = 0;
 };
 struct LookupResult {
     StoreBatch batch;

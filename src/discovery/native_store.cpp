@@ -46,26 +46,36 @@ struct AppendContext {
     std::size_t *inspected;
 };
 
+bool inspection_exhausted(const AppendContext &context) {
+    return context.inspected && (*context.inspected == std::numeric_limits<std::size_t>::max() ||
+                                 *context.inspected / 8 >= context.limits.max_values);
+}
+
+bool exceeds_limits(const AppendContext &context, std::size_t size) {
+    return size > context.limits.max_value_bytes ||
+           context.batch.values.size() >= context.limits.max_values ||
+           size > context.limits.max_total_bytes - context.bytes;
+}
+
+// Remote records are untrusted: anything over a limit is dropped and counted so
+// that one hostile publication cannot end the lookup or watch.
 bool append_one(AppendContext &context, const std::shared_ptr<dht::Value> &value) {
-    if (context.inspected && (*context.inspected == std::numeric_limits<std::size_t>::max() ||
-                              *context.inspected / 8 >= context.limits.max_values)) {
-        context.batch.error = StoreError::ResourceLimit;
-        return false;
-    }
-    if (context.inspected)
-        ++*context.inspected;
     if (!value) {
         context.batch.error = StoreError::InvalidRecord;
         return false;
     }
+    if (inspection_exhausted(context)) {
+        ++context.batch.dropped;
+        return true;
+    }
+    if (context.inspected)
+        ++*context.inspected;
     if (context.ids && duplicate(context.batch, *context.ids, *value, context.deduplication))
         return true;
     const auto size = value->data.size();
-    if (size > context.limits.max_value_bytes ||
-        context.batch.values.size() >= context.limits.max_values ||
-        size > context.limits.max_total_bytes - context.bytes) {
-        context.batch.error = StoreError::ResourceLimit;
-        return false;
+    if (exceeds_limits(context, size)) {
+        ++context.batch.dropped;
+        return true;
     }
     if (context.before_record_copy)
         context.before_record_copy();

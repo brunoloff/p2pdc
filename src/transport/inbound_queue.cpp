@@ -8,10 +8,11 @@
 namespace p2pdc::detail {
 
 InboundQueue::InboundQueue(MemoryBudget budget, std::size_t max_bytes, std::size_t max_messages,
-                           std::size_t max_message_size)
+                           std::size_t max_message_size, InboundOverflow overflow)
     : budget_(std::move(budget)), max_bytes_(max_bytes), max_messages_(max_messages),
-      max_message_size_(max_message_size) {
-    if (max_messages == 0 || max_message_size > max_bytes) {
+      max_message_size_(max_message_size), overflow_(overflow) {
+    if (max_messages == 0 || max_message_size > max_bytes ||
+        (overflow != InboundOverflow::Fail && overflow != InboundOverflow::Drop)) {
         throw std::invalid_argument("invalid inbound queue limits");
     }
 }
@@ -25,13 +26,20 @@ InboundPush InboundQueue::fail(InboundStatus error) {
     return {error, schedule};
 }
 
+InboundPush InboundQueue::overflow(InboundStatus error) {
+    if (overflow_ == InboundOverflow::Fail)
+        return fail(error);
+    ++dropped_;
+    return {InboundStatus::Dropped, false};
+}
+
 InboundPush InboundQueue::push(Bytes &&message, bool deduplicate_content) {
     std::lock_guard lock(mutex_);
     if (closed_ || error_) {
         return {InboundStatus::Closed, false};
     }
     if (message.size() > max_message_size_) {
-        return fail(InboundStatus::TooLarge);
+        return overflow(InboundStatus::TooLarge);
     }
     if (deduplicate_content &&
         std::any_of(messages_.begin(), messages_.end(),
@@ -39,11 +47,11 @@ InboundPush InboundQueue::push(Bytes &&message, bool deduplicate_content) {
         return {InboundStatus::Accepted, false};
     const auto capacity = message.capacity();
     if (messages_.size() >= max_messages_ || capacity > max_bytes_ - bytes_) {
-        return fail(InboundStatus::Full);
+        return overflow(InboundStatus::Full);
     }
     auto reservation = budget_.try_reserve(capacity);
     if (!reservation) {
-        return fail(InboundStatus::Full);
+        return overflow(InboundStatus::Full);
     }
     try {
         messages_.push_back({std::move(message), std::move(*reservation)});
@@ -100,6 +108,11 @@ void InboundQueue::close() {
 std::size_t InboundQueue::buffered_bytes() const {
     std::lock_guard lock(mutex_);
     return bytes_;
+}
+
+std::size_t InboundQueue::dropped() const {
+    std::lock_guard lock(mutex_);
+    return dropped_;
 }
 
 } // namespace p2pdc::detail

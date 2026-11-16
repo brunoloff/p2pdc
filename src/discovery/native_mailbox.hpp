@@ -24,7 +24,9 @@ struct MailboxCallbacks {
 };
 
 // Internal raw mailbox; records are untrusted and may be duplicated, reordered,
-// stale, or absent. The consumer must verify and deduplicate them. Methods and
+// stale, or absent. The consumer must verify and deduplicate them. Records over
+// the size, count or budget limits are dropped rather than closing the mailbox,
+// so a flood can delay signaling but cannot end it. Methods and
 // delivered callbacks use a serialized, asynchronous, FIFO executor whose
 // submission is nonblocking, nonthrowing and does not synchronously reenter
 // the mailbox;

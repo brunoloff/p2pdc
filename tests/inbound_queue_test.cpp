@@ -166,3 +166,23 @@ TEST(InboundQueue, ProducerRacingIdleTransitionNeverLosesDrain) {
     EXPECT_EQ(std::get<InboundMessage>(next).payload, (Bytes{std::byte{2}}));
     EXPECT_EQ(std::get<InboundStatus>(queue.next()), InboundStatus::Idle);
 }
+
+TEST(InboundQueue, DropPolicyDiscardsOverLimitRecordsAndStaysOpen) {
+    MemoryBudget budget(2);
+    InboundQueue queue(budget, 4, 1, 2, InboundOverflow::Drop);
+    EXPECT_EQ(queue.push(Bytes(3)).status, InboundStatus::Dropped);
+    EXPECT_EQ(queue.push(Bytes{std::byte{1}}).status, InboundStatus::Accepted);
+    EXPECT_EQ(queue.push(Bytes{std::byte{2}}).status, InboundStatus::Dropped);
+    EXPECT_EQ(queue.dropped(), 2U);
+    EXPECT_EQ(std::get<InboundMessage>(queue.next()).payload, Bytes{std::byte{1}});
+    EXPECT_EQ(std::get<InboundStatus>(queue.next()), InboundStatus::Idle);
+    MemoryBudget tight(1);
+    InboundQueue budgeted(tight, 4, 4, 2, InboundOverflow::Drop);
+    EXPECT_EQ(budgeted.push(Bytes(2)).status, InboundStatus::Dropped);
+    EXPECT_EQ(budgeted.push(Bytes{std::byte{3}}).status, InboundStatus::Accepted);
+}
+
+TEST(InboundQueue, RejectsUnknownOverflowPolicy) {
+    EXPECT_THROW((InboundQueue(MemoryBudget(4), 4, 1, 4, static_cast<InboundOverflow>(7))),
+                 std::invalid_argument);
+}

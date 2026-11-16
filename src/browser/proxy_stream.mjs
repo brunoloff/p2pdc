@@ -1,10 +1,13 @@
 import { ProxyError } from "./proxy_codec.mjs";
 
 // Each line is bounded before UTF-8 decoding; chunks may split any byte.
+// Lines carry untrusted DHT payloads, so an over-long line is skipped up to its
+// newline instead of ending the stream.
 class LineBuffer {
     constructor(limit, emit, signal) {
         this.bytes = new Uint8Array(limit);
         this.used = 0;
+        this.skipping = false;
         this.emit = emit;
         this.signal = signal;
         this.decoder = new TextDecoder("utf-8", { fatal: true });
@@ -14,16 +17,21 @@ class LineBuffer {
         let start = 0;
         while (start < chunk.length && !this.signal.aborted) {
             let end = chunk.indexOf(10, start);
-            if (end < 0) end = chunk.length;
-            const size = end - start;
-            if (size > this.bytes.length - this.used) throw new ProxyError("resource_limit", "proxy line too large");
-            this.bytes.set(chunk.subarray(start, end), this.used);
-            this.used += size;
-            if (end < chunk.length) this.flush();
+            const complete = end >= 0;
+            if (!complete) end = chunk.length;
+            this.append(chunk.subarray(start, end));
+            if (complete) this.flush();
             start = end + 1;
         }
     }
+    append(bytes) {
+        if (this.skipping) return;
+        if (bytes.length > this.bytes.length - this.used) { this.skipping = true; this.used = 0; return; }
+        this.bytes.set(bytes, this.used);
+        this.used += bytes.length;
+    }
     flush() {
+        if (this.skipping) { this.skipping = false; return; }
         if (this.used && this.bytes[this.used - 1] === 13) --this.used;
         if (!this.used) throw new ProxyError("invalid_record", "empty proxy record");
         let text;
@@ -32,7 +40,7 @@ class LineBuffer {
         this.used = 0;
         this.emit(text);
     }
-    finish() { if (this.used && !this.signal.aborted) this.flush(); }
+    finish() { if ((this.used || this.skipping) && !this.signal.aborted) this.flush(); }
 }
 
 export async function readLines(body, signal, maxLineBytes, emit) {

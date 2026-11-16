@@ -9,7 +9,21 @@
 
 namespace p2pdc::detail {
 
-enum class InboundStatus { Accepted, Idle, Closed, TooLarge, Full, AllocationFailed, InvalidType };
+enum class InboundStatus {
+    Accepted,
+    Idle,
+    Closed,
+    TooLarge,
+    Full,
+    AllocationFailed,
+    InvalidType,
+    Dropped
+};
+
+// Fail: a size, count or budget limit discards the queue and is terminal (used
+// for authenticated transport data). Drop: the record is discarded and counted
+// and the queue stays open (used for unauthenticated DHT mailbox records).
+enum class InboundOverflow { Fail, Drop };
 
 struct InboundPush {
     InboundStatus status;
@@ -31,7 +45,7 @@ using InboundNext = std::variant<InboundMessage, InboundStatus>;
 class InboundQueue {
   public:
     InboundQueue(MemoryBudget budget, std::size_t max_bytes, std::size_t max_messages,
-                 std::size_t max_message_size);
+                 std::size_t max_message_size, InboundOverflow overflow = InboundOverflow::Fail);
     InboundQueue(const InboundQueue &) = delete;
     InboundQueue &operator=(const InboundQueue &) = delete;
     [[nodiscard]] InboundPush push(Bytes &&message, bool deduplicate_content = false);
@@ -39,13 +53,17 @@ class InboundQueue {
     [[nodiscard]] InboundNext next();
     void close();
     [[nodiscard]] std::size_t buffered_bytes() const;
+    [[nodiscard]] std::size_t dropped() const;
 
   private:
     [[nodiscard]] InboundPush fail(InboundStatus error);
+    [[nodiscard]] InboundPush overflow(InboundStatus error);
     MemoryBudget budget_;
     std::size_t max_bytes_;
     std::size_t max_messages_;
     std::size_t max_message_size_;
+    InboundOverflow overflow_;
+    std::size_t dropped_ = 0;
     mutable std::mutex mutex_;
     std::deque<InboundMessage> messages_;
     std::size_t bytes_ = 0;

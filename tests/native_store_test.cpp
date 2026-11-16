@@ -12,8 +12,11 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <mutex>
 #include <new>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 using namespace p2pdc;
 using namespace p2pdc::detail;
@@ -163,7 +166,10 @@ TEST_F(NativeStoreTest, DiscoveryLookupCollapsesIdenticalPublicationsAcrossIds) 
     const Bytes payload{std::byte{7}, std::byte{8}};
     ASSERT_TRUE(put(writer, payload));
     ASSERT_TRUE(put(writer, payload));
-    EXPECT_EQ(lookup(reader).batch.error, StoreError::ResourceLimit);
+    const auto distinct = lookup(reader);
+    EXPECT_FALSE(distinct.batch.error);
+    EXPECT_EQ(distinct.batch.values, (std::vector<Bytes>{payload}));
+    EXPECT_EQ(distinct.batch.dropped, 1U);
     auto promise = std::make_shared<std::promise<LookupResult>>();
     auto future = promise->get_future();
     ASSERT_FALSE(reader.lookup(
@@ -175,7 +181,7 @@ TEST_F(NativeStoreTest, DiscoveryLookupCollapsesIdenticalPublicationsAcrossIds) 
     EXPECT_EQ(result.batch.values, (std::vector<Bytes>{payload}));
 }
 
-TEST_F(NativeStoreTest, LookupBoundsCountIndividualAndAggregatePayloads) {
+TEST_F(NativeStoreTest, LookupDropsRecordsBeyondCountIndividualAndAggregateBounds) {
     NativeStore writer(first, limits);
     ASSERT_TRUE(put(writer, Bytes(2, std::byte{1})));
     ASSERT_TRUE(put(writer, Bytes(2, std::byte{2})));
@@ -184,8 +190,9 @@ TEST_F(NativeStoreTest, LookupBoundsCountIndividualAndAggregatePayloads) {
          {StoreLimits{8, 1, 100}, StoreLimits{8, 8, 2}, StoreLimits{1, 8, 100}}) {
         NativeStore reader(second, bound);
         const auto result = lookup(reader);
-        EXPECT_EQ(result.batch.error, StoreError::ResourceLimit);
+        EXPECT_FALSE(result.batch.error);
         EXPECT_LE(result.batch.values.size(), 1U);
+        EXPECT_GE(result.batch.dropped, 2U);
         std::size_t bytes = 0;
         for (const auto &value : result.batch.values) {
             EXPECT_LE(value.size(), bound.max_value_bytes);
@@ -226,20 +233,41 @@ TEST_F(NativeStoreTest, WatchDeliversBinaryAndCancelSuppressesLaterPublications)
     EXPECT_EQ(calls->load(), count);
 }
 
-TEST_F(NativeStoreTest, WatchLimitErrorAndImmediateDestructionSuppressCallbacks) {
+TEST_F(NativeStoreTest, WatchDropsOversizedRecordAndImmediateDestructionSuppressesCallbacks) {
     NativeStore writer(first, limits), reader(second, {1, 8, 8});
-    auto promise = std::make_shared<std::promise<StoreBatch>>();
-    auto future = promise->get_future();
-    auto result =
-        reader.watch(key, [promise](StoreBatch batch) { promise->set_value(std::move(batch)); });
+    std::mutex mutex;
+    std::vector<StoreBatch> batches;
+    auto result = reader.watch(key, [&](StoreBatch batch) {
+        std::lock_guard lock(mutex);
+        batches.push_back(std::move(batch));
+    });
     auto watch = std::get<NativeWatch>(std::move(result));
+    ASSERT_EQ(watch.registration().wait_for(15s), std::future_status::ready);
     ASSERT_TRUE(put(writer, Bytes(2)));
-    EXPECT_EQ(await(future).error, StoreError::ResourceLimit);
+    ASSERT_TRUE(put(writer, Bytes{std::byte{7}}));
+    const auto deadline = std::chrono::steady_clock::now() + 15s;
+    auto delivered = [&] {
+        std::lock_guard lock(mutex);
+        return std::any_of(batches.begin(), batches.end(), [](const StoreBatch &batch) {
+            return !batch.values.empty() && batch.values.front() == Bytes{std::byte{7}};
+        });
+    };
+    while (!delivered() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(2ms);
+    ASSERT_TRUE(delivered());
     watch.cancel();
+    std::size_t dropped = 0;
+    for (const auto &batch : batches) {
+        EXPECT_FALSE(batch.error);
+        dropped += batch.dropped;
+        for (const auto &value : batch.values)
+            EXPECT_LE(value.size(), 1U);
+    }
+    EXPECT_GE(dropped, 1U);
     std::atomic<int> calls{0};
     {
-        auto dropped = reader.watch(missing_key, [&calls](StoreBatch) { ++calls; });
-        ASSERT_TRUE(std::holds_alternative<NativeWatch>(dropped));
+        auto ignored = reader.watch(missing_key, [&calls](StoreBatch) { ++calls; });
+        ASSERT_TRUE(std::holds_alternative<NativeWatch>(ignored));
     }
     auto published = std::make_shared<std::promise<bool>>();
     auto published_future = published->get_future();

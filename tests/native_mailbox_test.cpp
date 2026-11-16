@@ -138,7 +138,7 @@ TEST_F(NativeMailboxTest, ReceivesExistingAndNewValuesAndStopsAfterClose) {
     EXPECT_EQ(records.size(), delivered);
 }
 
-TEST_F(NativeMailboxTest, QueueOverflowClosesAndReportsFailure) {
+TEST_F(NativeMailboxTest, QueueOverflowDropsExcessRecordsAndStaysOpen) {
     MemoryBudget budget(4096);
     auto mailbox = create({4096, 1, 1024}, budget);
     ASSERT_EQ(mailbox->registration().wait_for(10s), std::future_status::ready);
@@ -150,16 +150,29 @@ TEST_F(NativeMailboxTest, QueueOverflowClosesAndReportsFailure) {
     }
     ASSERT_GT(budget.used(), 0U);
     ASSERT_TRUE(put(Bytes{std::byte{2}}));
-    const auto second_deadline = std::chrono::steady_clock::now() + 10s;
-    while (budget.used() != 0 && std::chrono::steady_clock::now() < second_deadline) {
-        std::this_thread::sleep_for(2ms);
-    }
-    ASSERT_EQ(budget.used(), 0U);
-    ASSERT_TRUE(loop.until([&] { return !errors.empty(); }));
-    EXPECT_EQ(errors.front(), MailboxError::QueueFull);
-    EXPECT_FALSE(mailbox->is_open());
-    EXPECT_TRUE(records.empty());
-    EXPECT_EQ(std::get<CatchupError>(mailbox->catch_up()), CatchupError::Closed);
+    ASSERT_TRUE(loop.until([&] { return !records.empty(); }));
+    EXPECT_TRUE(errors.empty());
+    EXPECT_TRUE(mailbox->is_open());
+    EXPECT_EQ(records.front(), Bytes{std::byte{1}});
+    const Bytes later{std::byte{3}};
+    ASSERT_TRUE(put(later));
+    ASSERT_TRUE(loop.until(
+        [&] { return std::find(records.begin(), records.end(), later) != records.end(); }));
+    EXPECT_TRUE(errors.empty());
+}
+
+TEST_F(NativeMailboxTest, OversizedRecordIsDroppedAndLaterRecordsArrive) {
+    auto mailbox = create({4096, 16, 2}, MemoryBudget(4096));
+    ASSERT_EQ(mailbox->registration().wait_for(10s), std::future_status::ready);
+    ASSERT_NE(mailbox->registration().get(), 0U);
+    ASSERT_TRUE(put(Bytes(3, std::byte{9})));
+    const Bytes later{std::byte{4}};
+    ASSERT_TRUE(put(later));
+    ASSERT_TRUE(loop.until(
+        [&] { return std::find(records.begin(), records.end(), later) != records.end(); }));
+    EXPECT_TRUE(errors.empty());
+    EXPECT_TRUE(mailbox->is_open());
+    EXPECT_EQ(std::count(records.begin(), records.end(), Bytes(3, std::byte{9})), 0);
 }
 
 TEST_F(NativeMailboxTest, PublisherBoundsOutstandingWritesAndPublishes) {

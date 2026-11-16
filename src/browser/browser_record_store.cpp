@@ -91,9 +91,8 @@ struct StoreState : std::enable_shared_from_this<StoreState> {
     std::optional<unsigned> add(std::shared_ptr<Operation> operation);
     void cancel(unsigned operation);
     bool event(unsigned operation, unsigned kind, ByteView value, unsigned detail);
-    bool lookup_record(unsigned operation, const std::shared_ptr<Operation> &item, ByteView value);
-    bool watch_record(unsigned operation, const std::shared_ptr<Operation> &item, ByteView value,
-                      bool expired);
+    bool lookup_record(const std::shared_ptr<Operation> &item, ByteView value);
+    bool watch_record(const std::shared_ptr<Operation> &item, ByteView value, bool expired);
     void fail(unsigned operation, StoreError error);
 };
 
@@ -171,29 +170,30 @@ void StoreState::fail(unsigned operation, StoreError error) {
         value->result.batch.error = error;
         value->lookup(std::move(value->result));
     } else {
-        value->watch(StoreBatch{{}, error, false});
+        value->watch(StoreBatch{{}, error, false, 0});
         readiness(*value, false);
     }
 }
-bool StoreState::lookup_record(unsigned operation, const std::shared_ptr<Operation> &item,
-                               ByteView value) {
+// Records are untrusted: over-limit records are dropped and counted, and the
+// operation continues (see StoreBatch).
+bool StoreState::lookup_record(const std::shared_ptr<Operation> &item, ByteView value) {
     if (value.size() > limits.max_value_bytes ||
         item->result.batch.values.size() >= limits.max_values ||
         value.size() > limits.max_total_bytes - item->bytes) {
-        fail(operation, StoreError::ResourceLimit);
-        return false;
+        ++item->result.batch.dropped;
+        return true;
     }
     item->bytes += value.size();
     item->result.batch.values.push_back(copy_value(value));
     return true;
 }
-bool StoreState::watch_record(unsigned operation, const std::shared_ptr<Operation> &item,
-                              ByteView value, bool expired) {
+bool StoreState::watch_record(const std::shared_ptr<Operation> &item, ByteView value,
+                              bool expired) {
     if (value.size() > limits.max_value_bytes || value.size() > limits.max_total_bytes) {
-        fail(operation, StoreError::ResourceLimit);
-        return false;
+        item->watch(StoreBatch{{}, {}, expired, 1});
+        return true;
     }
-    item->watch(StoreBatch{{copy_value(value)}, {}, expired});
+    item->watch(StoreBatch{{copy_value(value)}, {}, expired, 0});
     return true;
 }
 bool StoreState::event(unsigned operation, unsigned kind, ByteView value, unsigned detail) {
@@ -205,7 +205,7 @@ bool StoreState::event(unsigned operation, unsigned kind, ByteView value, unsign
         operations.erase(found);
         item->put(detail == 1);
     } else if (kind == 1 && item->kind == Kind::Lookup) {
-        return lookup_record(operation, item, value);
+        return lookup_record(item, value);
     } else if (kind == 2 && item->kind == Kind::Lookup) {
         operations.erase(found);
         if (detail)
@@ -215,7 +215,7 @@ bool StoreState::event(unsigned operation, unsigned kind, ByteView value, unsign
     } else if (kind == 3 && item->kind == Kind::Watch) {
         readiness(*item, detail == 1);
     } else if (kind == 4 && item->kind == Kind::Watch) {
-        return watch_record(operation, item, value, detail == 1);
+        return watch_record(item, value, detail == 1);
     } else if (kind == 5 && item->kind == Kind::Watch) {
         fail(operation, map_error(detail));
     } else {

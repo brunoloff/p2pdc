@@ -37,16 +37,26 @@ export function encodeBase64(bytes) {
     return btoa(binary);
 }
 
+// Oversized payloads are untrusted DHT data, not proxy faults: callers drop
+// records that fail with "oversized_record" and keep the operation running.
 function decodeBase64(value, maxBytes) {
-    if (typeof value !== "string" || value.length > 4 * Math.ceil(maxBytes / 3) ||
+    if (typeof value !== "string" ||
         !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
-        throw new ProxyError("invalid_record", "invalid or oversized base64 payload");
+        throw new ProxyError("invalid_record", "invalid base64 payload");
     }
+    if (value.length > 4 * Math.ceil(maxBytes / 3)) throw new ProxyError("oversized_record", "oversized payload");
     const binary = atob(value);
-    if (binary.length > maxBytes || btoa(binary) !== value) {
-        throw new ProxyError("invalid_record", "noncanonical or oversized base64 payload");
-    }
+    if (btoa(binary) !== value) throw new ProxyError("invalid_record", "noncanonical base64 payload");
+    if (binary.length > maxBytes) throw new ProxyError("oversized_record", "oversized payload");
     return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+export function decodeRecordOrDrop(line, maxBytes) {
+    try { return decodeRecord(line, maxBytes); }
+    catch (error) {
+        if (error instanceof ProxyError && error.code === "oversized_record") return null;
+        throw error;
+    }
 }
 
 export function decodeRecord(line, maxBytes) {

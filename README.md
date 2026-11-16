@@ -124,6 +124,11 @@ Browser connections remain experimental.
 Each browser store reserves its configured maximum response size for each
 pending lookup, with a 16 MiB total reservation limit; excess concurrent
 lookups report `ResourceLimit`. This limit does not cover all browser memory.
+DHT records are unauthenticated: on native and browser stores, records larger
+than the configured value size, or beyond a lookup's or watch batch's record
+and byte limits, are dropped and counted rather than ending the lookup, watch or
+mailbox. A flood of records can still crowd out legitimate ones until they
+expire, but it cannot permanently stop discovery or signaling.
 
 ## Native build and tests
 

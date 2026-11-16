@@ -1,4 +1,4 @@
-import { ProxyError, decodeRecord, encodeBase64, keyHex } from "./proxy_codec.mjs";
+import { ProxyError, decodeRecordOrDrop, encodeBase64, keyHex } from "./proxy_codec.mjs";
 import { readLines } from "./proxy_stream.mjs";
 export { ProxyError } from "./proxy_codec.mjs";
 
@@ -113,15 +113,16 @@ export class OpenDhtProxy {
         try {
             const response = await this.request(url, { method: "GET" }, scope);
             if (response.body) await readLines(response.body, scope.signal, lineLimit(this.limits.maxValueBytes), (line) => {
-                if (options.deduplicateByContent && ++inspected > this.limits.maxValues * 8)
-                    throw new ProxyError("resource_limit", "proxy lookup inspection limit exceeded");
-                const record = decodeRecord(line, this.limits.maxValueBytes);
+                // Records beyond the limits are untrusted surplus: drop them.
+                if (options.deduplicateByContent && ++inspected > this.limits.maxValues * 8) return;
+                const record = decodeRecordOrDrop(line, this.limits.maxValueBytes);
+                if (!record) return;
                 const content = encodeBase64(record.bytes);
                 const identity = options.deduplicateByContent ? `${record.expired}:${content}` :
                     record.id && record.id !== "0" ? `${record.id.length}:${record.id}:${content}` : null;
                 if (identity && seen.has(identity)) return;
                 if (values.length >= this.limits.maxValues || record.bytes.length > this.limits.maxTotalBytes - total)
-                    throw new ProxyError("resource_limit", "proxy lookup exceeded limits");
+                    return;
                 if (identity) seen.add(identity);
                 total += record.bytes.length;
                 values.push(record);
@@ -147,10 +148,8 @@ export class OpenDhtProxy {
                 resolveReady(!scope.signal.aborted);
                 await readLines(response.body, scope.signal, lineLimit(this.limits.maxValueBytes), (line) => {
                     if (scope.signal.aborted) return;
-                    const record = decodeRecord(line, this.limits.maxValueBytes);
-                    if (record.bytes.length > this.limits.maxTotalBytes)
-                        throw new ProxyError("resource_limit", "proxy record exceeded limits");
-                    onRecord(record);
+                    const record = decodeRecordOrDrop(line, this.limits.maxValueBytes);
+                    if (record && record.bytes.length <= this.limits.maxTotalBytes) onRecord(record);
                 });
                 if (!scope.signal.aborted) throw new ProxyError("stream_closed", "proxy listen stream ended");
                 if (!closed) throw new DOMException("request aborted", "AbortError");
