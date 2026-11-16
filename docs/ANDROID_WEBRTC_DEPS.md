@@ -14,8 +14,8 @@ the library root after setting the prefixes and NDK variable described in
 
 ```sh
 git clone --depth 1 --branch 2.88.3 https://github.com/GNOME/glib.git .deps/glib-android-src
-git -C .deps/glib-android-src rev-parse HEAD
-# Expected: 43bc79ea8803e33c5eb368085e2d5906f9f98079
+test "$(git -C .deps/glib-android-src rev-parse HEAD)" = \
+  43bc79ea8803e33c5eb368085e2d5906f9f98079
 ```
 
 Use the GLib Meson setup and targeted build commands in the Android notes, but

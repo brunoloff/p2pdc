@@ -20,7 +20,13 @@ they are not vendored or automatically locked by the build.
 | Playwright Firefox | 155.0, Playwright browser revision 1543 |
 
 The [Linux build](../README.md#native-build-and-tests) instructions fetch and
-patch libnice and libdatachannel. The [WebAssembly instructions](WEBASSEMBLY_INTERNALS.md)
+patch libnice and libdatachannel. Their checkouts, the Android OpenDHT and
+Jami contrib checkouts, and the Android libnice and GLib clones are verified
+against the commits above (the shallow Android clones with a `test` that fails
+on a mismatch). `patches/SHA256SUMS` records the patch files; check it with
+`(cd patches && sha256sum -c SHA256SUMS)` before applying them. Host-provided
+packages (OpenDHT, msgpack-cxx, GLib and OpenSSL on Linux) are not pinned by
+the build; the table records the versions that were tested. The [WebAssembly instructions](WEBASSEMBLY_INTERNALS.md)
 pin the libsodium source archive by SHA-256. Other versions have not been
 established by these checks; the list is not a claim that older or newer
 versions necessarily fail.

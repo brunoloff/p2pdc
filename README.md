@@ -233,6 +233,7 @@ locally. It requires GLib/GIO development files, OpenSSL, Meson, pkg-config,
 Git, Ninja, and a C/C++ toolchain:
 
 ```sh
+(cd patches && sha256sum -c SHA256SUMS)
 git clone https://github.com/libnice/libnice.git .deps/libnice-tls-src
 git -C .deps/libnice-tls-src checkout af62014d520ac09c8fe1974bda1b253114c68843
 git -C .deps/libnice-tls-src apply ../../patches/libnice-v0.1.24-p2pdc-tls.patch

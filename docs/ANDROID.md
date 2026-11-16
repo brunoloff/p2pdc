@@ -208,8 +208,8 @@ with these static dependency flags.
 
 ```sh
 git clone --depth 1 --branch 0.1.24 https://github.com/libnice/libnice.git .deps/libnice-android-src
-git -C .deps/libnice-android-src rev-parse HEAD
-# Expected: af62014d520ac09c8fe1974bda1b253114c68843
+test "$(git -C .deps/libnice-android-src rev-parse HEAD)" = \
+  af62014d520ac09c8fe1974bda1b253114c68843
 PKG_CONFIG_PATH= nice -n 15 ionice -c 3 meson setup .deps/libnice-android-build \
   .deps/libnice-android-src --cross-file "$PWD/.deps/android-arm64-meson.ini" \
   --prefix "$P2PDC_ANDROID_NICE" --libdir lib --default-library static \
