@@ -17,7 +17,9 @@ option(P2PDC_ENABLE_SODIUM "Build libsodium security primitives" ON)
 option(P2PDC_BUILD_BROWSER_RELIABLE "Build experimental WebAssembly reliable bridge" OFF)
 option(P2PDC_BUILD_BROWSER_SECURITY_TEST "Build browser handshake smoke test" OFF)
 option(P2PDC_BUILD_BROWSER_SECURE "Build experimental authenticated WebAssembly bridge" OFF)
-option(P2PDC_BUILD_SHARED_TEXT "Build the Qt Quick shared text example" ON)
+# The example needs Qt, Yrs and every backend, so it is built by default only
+# when p2pdc is the top-level project, not when a consumer embeds it.
+option(P2PDC_BUILD_SHARED_TEXT "Build the Qt Quick shared text example" ${p2pdc_is_top_level})
 if(P2PDC_TEST_NATIVE_TRANSPORT AND NOT P2PDC_ENABLE_NATIVE_TRANSPORT)
     message(FATAL_ERROR "P2PDC_TEST_NATIVE_TRANSPORT requires P2PDC_ENABLE_NATIVE_TRANSPORT")
 endif()

@@ -19,9 +19,15 @@ add_test(NAME p2pdc_opendht_target
 add_test(NAME p2pdc_opendht_missing_target
          COMMAND ${CMAKE_COMMAND} -DCASE=missing -DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} -P
                  ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake_opendht_target_test.cmake)
+# Configure the embedding project from an empty directory each time so a
+# cached option from an earlier run cannot mask the current defaults.
+add_test(NAME p2pdc_opendht_embedded_clean
+         COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_CURRENT_BINARY_DIR}/test-opendht-embedded)
+set_tests_properties(p2pdc_opendht_embedded_clean PROPERTIES FIXTURES_SETUP p2pdc_embedded_dir)
 add_test(NAME p2pdc_opendht_embedded_target
          COMMAND ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake_opendht_embedded
                  -B ${CMAKE_CURRENT_BINARY_DIR}/test-opendht-embedded)
+set_tests_properties(p2pdc_opendht_embedded_target PROPERTIES FIXTURES_REQUIRED p2pdc_embedded_dir)
 add_test(NAME p2pdc_datachannel_missing_package
          COMMAND ${CMAKE_COMMAND} -DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} -P
                  ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake_datachannel_missing_test.cmake)

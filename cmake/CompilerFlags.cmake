@@ -3,11 +3,11 @@
 # -Werror is useful while developing p2pdc but breaks consumers whose newer
 # compilers add warnings, so it defaults to ON only for top-level builds.
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    set(p2pdc_werror_default ON)
+    set(p2pdc_is_top_level ON)
 else()
-    set(p2pdc_werror_default OFF)
+    set(p2pdc_is_top_level OFF)
 endif()
-option(P2PDC_WERROR "Treat compiler warnings as errors in p2pdc targets" ${p2pdc_werror_default})
+option(P2PDC_WERROR "Treat compiler warnings as errors in p2pdc targets" ${p2pdc_is_top_level})
 option(P2PDC_HARDENING "Build the p2pdc library with compiler and linker hardening" ON)
 
 set(p2pdc_warning_flags -Wall -Wextra -Wpedantic)

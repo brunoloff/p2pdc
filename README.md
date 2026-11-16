@@ -146,7 +146,8 @@ report a build command if their executable is missing.
 opens it in the default browser; press Ctrl+C in that terminal to stop it.
 
 The [shared text editor example](examples/shared-text/README.md) is built by
-default and additionally needs Qt 6 and Yrs. Use
+default when p2pdc is the top-level project (not when embedded with
+`add_subdirectory()`) and additionally needs Qt 6 and Yrs. Use
 `-DP2PDC_BUILD_SHARED_TEXT=OFF` to build the library without those dependencies.
 
 The default native build includes the discovery and WebRTC backends. It needs a

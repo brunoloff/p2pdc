@@ -24,7 +24,8 @@ demonstration, not a durable or production document service.
 
 ## Build
 
-The example is enabled by default (`P2PDC_BUILD_SHARED_TEXT=ON`). It needs Qt 6
+The example is enabled by default (`P2PDC_BUILD_SHARED_TEXT=ON`) when p2pdc is
+the top-level CMake project. It needs Qt 6
 Core, Gui, Qml, Quick and Quick Controls 2, plus a target-compatible Yrs C
 library and its matching `libyrs.h`. The Linux development checks used Qt
 6.11.2 and Yrs 0.28.0. Build Yrs once with Cargo as in the
@@ -42,8 +43,9 @@ nice -n 15 ionice -c 3 cmake --build build-native --parallel 1 --target p2pdc_sh
 
 The launcher prefers `build-native-tls` when available, otherwise it uses
 `build-native`. The local paths are discovered automatically if they exist. Set
-`-DP2PDC_BUILD_SHARED_TEXT=OFF` to build p2pdc without Qt or Yrs. An external
-CMake consumer can set the same option before `add_subdirectory()`.
+`-DP2PDC_BUILD_SHARED_TEXT=OFF` to build p2pdc without Qt or Yrs. When a
+consumer embeds p2pdc with `add_subdirectory()` the example defaults to OFF;
+the consumer can set the option before that call to build it.
 
 For cross-compilation, use the target's Qt 6 kit and CMake toolchain, and pass
 headers and a **target-architecture** Yrs library through the same two options.
