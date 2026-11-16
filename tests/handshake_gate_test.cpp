@@ -60,12 +60,12 @@ struct Pair {
             if (!left.sent.empty()) {
                 auto frame = std::move(left.sent.front());
                 left.sent.erase(left.sent.begin());
-                gb->on_message(frame);
+                gb->on_message(std::move(frame));
             }
             if (!right.sent.empty()) {
                 auto frame = std::move(right.sent.front());
                 right.sent.erase(right.sent.begin());
-                ga->on_message(frame);
+                ga->on_message(std::move(frame));
             }
         }
     }
@@ -91,6 +91,21 @@ TEST(HandshakeGate, WithholdsDataUntilBothConfirmAndNegotiatesLimits) {
     ASSERT_EQ(pair.received.size(), 1U);
     EXPECT_EQ(pair.received[0], (Bytes{std::byte{0}, std::byte{255}}));
     EXPECT_TRUE(pair.errors.empty());
+}
+
+TEST(HandshakeGate, DeliversApplicationBytesWithoutCopyingThem) {
+    Pair pair;
+    pair.create();
+    pair.ga->set_transport_ready(true);
+    pair.gb->set_transport_ready(true);
+    pair.deliver();
+    ASSERT_TRUE(pair.gb->ready());
+    Bytes frame{std::byte{1}, std::byte{4}, std::byte{5}, std::byte{6}};
+    const auto *storage = frame.data();
+    pair.gb->on_message(std::move(frame));
+    ASSERT_EQ(pair.received.size(), 1U);
+    EXPECT_EQ(pair.received[0], (Bytes{std::byte{4}, std::byte{5}, std::byte{6}}));
+    EXPECT_EQ(pair.received[0].data(), storage);
 }
 
 TEST(HandshakeGate, RetriesControlAfterBackpressureAndSuspension) {

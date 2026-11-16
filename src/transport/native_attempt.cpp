@@ -206,7 +206,7 @@ NativeLinkCallbacks NativeAttempt::Impl::link_callbacks() {
             // the local description task precedes readiness on the FIFO
             // executor. A message without a gate is a protocol violation.
             if (self->gate)
-                self->gate->on_message(value);
+                self->gate->on_message(std::move(value));
             else
                 self->fail();
         }

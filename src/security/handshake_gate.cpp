@@ -115,12 +115,12 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
         }
     }
 
-    void receive(ByteView bytes) {
+    void receive(Bytes bytes) {
         if (stopped) {
             return;
         }
         try {
-            receive_checked(bytes);
+            receive_checked(std::move(bytes));
         } catch (const std::bad_alloc &) {
             fail(GateError::Allocation);
         } catch (const std::length_error &) {
@@ -128,14 +128,14 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
         }
     }
 
-    void receive_checked(ByteView bytes) {
+    void receive_checked(Bytes bytes) {
         if (!transport_ready || bytes.empty()) {
             fail(GateError::Protocol);
         } else if (bytes.front() == control && !activated) {
             if (before_control_verify) {
                 before_control_verify();
             }
-            auto result = exchange.receive(bytes.subspan(1));
+            auto result = exchange.receive(ByteView(bytes).subspan(1));
             if (!std::holds_alternative<std::monostate>(result)) {
                 fail(GateError::Protocol);
             } else {
@@ -143,7 +143,8 @@ struct HandshakeGate::Impl : std::enable_shared_from_this<Impl> {
             }
         } else if (bytes.front() == application && activated &&
                    bytes.size() - 1 <= *exchange.message_limit()) {
-            callbacks.on_message(Bytes(bytes.begin() + 1, bytes.end()));
+            bytes.erase(bytes.begin()); // drop the marker in place, without a copy
+            callbacks.on_message(std::move(bytes));
         } else {
             fail(GateError::Protocol);
         }
@@ -196,9 +197,9 @@ void HandshakeGate::set_transport_ready(bool ready) {
         self->drive();
     }
 }
-void HandshakeGate::on_message(ByteView message) {
+void HandshakeGate::on_message(Bytes message) {
     auto self = impl_;
-    self->receive(message);
+    self->receive(std::move(message));
 }
 void HandshakeGate::on_writable() {
     auto self = impl_;

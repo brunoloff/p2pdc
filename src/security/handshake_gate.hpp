@@ -45,7 +45,8 @@ class HandshakeGate {
     HandshakeGate &operator=(const HandshakeGate &) = delete;
     [[nodiscard]] ChannelSend send(ByteView message);
     void set_transport_ready(bool ready);
-    void on_message(ByteView message);
+    // Takes ownership so application bytes are delivered without a copy.
+    void on_message(Bytes message);
     void on_writable();
     void timeout();
     void close();

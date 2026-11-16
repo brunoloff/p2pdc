@@ -56,7 +56,7 @@ SecureChannel::~SecureChannel() { close(); }
 ReliableChannelCallbacks SecureChannel::channel_callbacks() {
     return {[this](Bytes message) {
                 if (!stopped_ && gate_)
-                    gate_->on_message(message);
+                    gate_->on_message(std::move(message));
             },
             [this](ChannelFailure reason) { fail(map_failure(reason)); },
             [this] {
