@@ -26,4 +26,12 @@ TEST(BrowserIceConfig, RejectsInvalidConfigurations) {
     EXPECT_THROW((void)browser_ice_servers({std::vector<IceServer>(17, StunServer{"host", 3478}),
                                             RelayPolicy::Automatic}),
                  std::invalid_argument);
+    for (const char *host : {"turn.example;transport=tcp", "host%3Fx", "a,b", "host\\x", "h\"x",
+                             "bad host", "user@host"})
+        EXPECT_THROW((void)browser_ice_servers({{StunServer{host, 3478}}, RelayPolicy::Automatic}),
+                     std::invalid_argument)
+            << host;
+    EXPECT_NO_THROW((void)browser_ice_servers(
+        {{StunServer{"turn-1.example_net.org", 3478}, StunServer{"2001:db8::1", 3478}},
+         RelayPolicy::Automatic}));
 }

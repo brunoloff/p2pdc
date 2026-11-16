@@ -35,7 +35,9 @@ using IceServer = std::variant<StunServer, TurnServer>;
 // when that implementation is not loaded. Browser support and actual relay
 // use must be checked separately.
 // At most 16 servers are allowed; host names are at most 253 bytes and each
-// TURN credential is at most 1024 bytes. These limits apply on every target.
+// TURN credential is at most 1024 bytes. Hosts may contain only letters,
+// digits, '.', '-', '_' and ':' (bare IPv6; zone identifiers are rejected).
+// These limits apply on every target.
 struct IceConfig {
     std::vector<IceServer> servers;
     RelayPolicy relay_policy = RelayPolicy::Automatic;

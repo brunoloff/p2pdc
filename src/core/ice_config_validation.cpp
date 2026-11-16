@@ -6,13 +6,15 @@
 
 namespace p2pdc::detail {
 namespace {
+// Hosts are DNS names, IPv4 or bare IPv6 addresses; allowing only their
+// characters keeps them from injecting URL syntax into browser ICE URLs
+// (IPv6 zone identifiers such as "%eth0" are therefore not accepted).
+bool host_character(unsigned char c) {
+    return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == ':';
+}
 void validate_address(const std::string &host, std::uint16_t port) {
     if (host.empty() || host.size() > 253 || !port ||
-        std::any_of(host.begin(), host.end(),
-                    [](unsigned char c) {
-                        return std::isspace(c) || std::iscntrl(c) || c == '/' || c == '?' ||
-                               c == '#' || c == '@' || c == '[' || c == ']';
-                    }) ||
+        !std::all_of(host.begin(), host.end(), host_character) ||
         std::count(host.begin(), host.end(), ':') == 1 || host.find(":::") != std::string::npos)
         throw std::invalid_argument("ICE server needs a valid host and nonzero port");
 }
