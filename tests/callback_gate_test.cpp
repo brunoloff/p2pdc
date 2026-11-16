@@ -188,3 +188,39 @@ TEST(CallbackGate, ShutdownCannotOvertakeOperationSubmission) {
     tasks.back()();
     EXPECT_EQ(calls, (std::vector<int>{1, 2}));
 }
+
+TEST(CallbackGate, ThrowingExecutorDoesNotBlockTheFinalCallback) {
+    std::vector<std::function<void()>> tasks;
+    bool reject = true;
+    CallbackGate gate([&](auto task) {
+        if (reject)
+            throw std::runtime_error("executor stopped");
+        tasks.push_back(std::move(task));
+    });
+    EXPECT_THROW((void)gate.post([] { FAIL() << "rejected callback ran"; }), std::runtime_error);
+    reject = false;
+    bool finished = false;
+    EXPECT_TRUE(gate.close([&] { finished = true; }));
+    ASSERT_EQ(tasks.size(), 1U);
+    tasks.front()();
+    EXPECT_TRUE(finished);
+}
+
+TEST(CallbackGate, ThrowingExecutorAfterCloseStillReportsTheSubmissionError) {
+    std::vector<std::function<void()>> tasks;
+    int calls = 0;
+    CallbackGate gate([&](auto task) {
+        if (++calls == 2)
+            throw std::runtime_error("executor stopped");
+        tasks.push_back(std::move(task));
+    });
+    EXPECT_TRUE(gate.post([] {}));
+    EXPECT_THROW((void)gate.post([] {}), std::runtime_error);
+    bool finished = false;
+    EXPECT_TRUE(gate.close([&] { finished = true; }));
+    ASSERT_EQ(tasks.size(), 1U);
+    tasks.front()();
+    ASSERT_EQ(tasks.size(), 2U);
+    tasks.back()();
+    EXPECT_TRUE(finished);
+}

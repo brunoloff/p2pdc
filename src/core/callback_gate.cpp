@@ -1,6 +1,8 @@
 #include "p2pdc/callback_gate.h"
 
 #include <atomic>
+#include <exception>
+#include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -64,7 +66,20 @@ bool CallbackGate::post(std::function<void()> callback) const {
         }
         ++state->pending;
     }
-    state->executor(std::move(task));
+    try {
+        state->executor(std::move(task));
+    } catch (...) {
+        // A rejected submission must release its slot, or close() would never
+        // deliver its final callback.
+        auto error = std::current_exception();
+        try {
+            detail::finish_callback(state);
+        } catch (const std::exception &final_error) {
+            std::cerr << "p2pdc: callback gate could not schedule its final callback: "
+                      << final_error.what() << '\n';
+        }
+        std::rethrow_exception(error);
+    }
     return true;
 }
 
