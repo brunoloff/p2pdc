@@ -6,7 +6,7 @@ if(P2PDC_ENABLE_SODIUM AND (EMSCRIPTEN OR (P2PDC_ENABLE_OPENDHT AND P2PDC_ENABLE
         examples/echo/echo_peer.cpp)
     target_link_libraries(p2pdc_echo PRIVATE p2pdc::p2pdc)
     target_compile_options(p2pdc_echo PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+        $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
     if(EMSCRIPTEN)
         target_sources(p2pdc_echo PRIVATE examples/echo/standalone_host_browser.cpp)
         target_link_options(p2pdc_echo PRIVATE "-sNO_EXIT_RUNTIME=1"

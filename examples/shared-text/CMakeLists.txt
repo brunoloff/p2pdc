@@ -17,14 +17,14 @@ target_include_directories(p2pdc_shared_text SYSTEM PRIVATE "${P2PDC_YRS_INCLUDE
 target_link_libraries(p2pdc_shared_text PRIVATE p2pdc::p2pdc Qt6::Core Qt6::Gui Qt6::Qml
     Qt6::Quick Qt6::QuickControls2 "${P2PDC_YRS_LIBRARY}" "${SODIUM_LIBRARY}")
 target_compile_options(p2pdc_shared_text PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+    $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_executable(p2pdc_shared_text_tests document_test.cpp cursor_test.cpp sync_state_test.cpp document.cpp cursor.cpp)
     target_include_directories(p2pdc_shared_text_tests SYSTEM PRIVATE "${P2PDC_YRS_INCLUDE_DIR}")
     target_link_libraries(p2pdc_shared_text_tests PRIVATE p2pdc::p2pdc Qt6::Core
         GTest::gtest_main "${P2PDC_YRS_LIBRARY}")
     target_compile_options(p2pdc_shared_text_tests PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+        $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
     include(GoogleTest)
     gtest_discover_tests(p2pdc_shared_text_tests)
 endif()
@@ -36,7 +36,7 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     target_link_libraries(p2pdc_shared_text_session_tests PRIVATE p2pdc::p2pdc Qt6::Core Qt6::Qml GTest::gtest
         "${P2PDC_YRS_LIBRARY}" "${SODIUM_LIBRARY}" ${p2pdc_opendht_target} msgpack-cxx)
     target_compile_options(p2pdc_shared_text_session_tests PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+        $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
     gtest_discover_tests(p2pdc_shared_text_session_tests PROPERTIES TIMEOUT 90)
     add_executable(p2pdc_shared_text_ui_tests ui_test.cpp session.cpp session_discovery.cpp
         session_connection.cpp session_cursor.cpp cursor.cpp document.cpp session.hpp)
@@ -47,6 +47,6 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     target_link_libraries(p2pdc_shared_text_ui_tests PRIVATE p2pdc::p2pdc Qt6::Core Qt6::Gui
         Qt6::Qml Qt6::Quick Qt6::QuickControls2 GTest::gtest "${P2PDC_YRS_LIBRARY}" "${SODIUM_LIBRARY}")
     target_compile_options(p2pdc_shared_text_ui_tests PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+        $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
     gtest_discover_tests(p2pdc_shared_text_ui_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()

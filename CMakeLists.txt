@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set_property(GLOBAL APPEND PROPERTY JOB_POOLS p2pdc_heavy=1)
 set(CMAKE_JOB_POOL_COMPILE p2pdc_heavy)
 set(CMAKE_JOB_POOL_LINK p2pdc_heavy)
+include(cmake/CompilerFlags.cmake)
 include(cmake/NativeOptions.cmake)
 include(CTest)
 option(P2PDC_TEST_OPENDHT "Run local OpenDHT integration tests" OFF)
@@ -138,8 +139,9 @@ target_include_directories(p2pdc PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_options(p2pdc PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>
+    $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>
 )
+p2pdc_apply_hardening(p2pdc)
 
 if(P2PDC_BUILD_BROWSER_RELIABLE)
     if(NOT EMSCRIPTEN)
@@ -196,19 +198,19 @@ if(P2PDC_BUILD_BROWSER_SECURITY_TEST)
     set_target_properties(p2pdc_browser_handshake_smoke PROPERTIES SUFFIX ".mjs")
     add_executable(p2pdc_browser_runtime_smoke tests/browser_runtime_smoke.cpp)
     target_link_libraries(p2pdc_browser_runtime_smoke PRIVATE p2pdc::p2pdc)
-    target_compile_options(p2pdc_browser_runtime_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(p2pdc_browser_runtime_smoke PRIVATE ${p2pdc_warning_flags})
     target_link_options(p2pdc_browser_runtime_smoke PRIVATE "-sNO_EXIT_RUNTIME=1")
     add_executable(p2pdc_browser_record_store_smoke tests/browser_record_store_smoke.cpp tests/browser_terminal_retention_smoke.cpp tests/browser_public_discovery_probe.cpp tests/browser_mailbox_attempt_smoke.cpp tests/browser_mailbox_failure_smoke.cpp tests/portable_discovery_smoke.cpp tests/record_store_smoke.cpp)
     target_link_libraries(p2pdc_browser_record_store_smoke PRIVATE p2pdc::p2pdc)
-    target_compile_options(p2pdc_browser_record_store_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(p2pdc_browser_record_store_smoke PRIVATE ${p2pdc_warning_flags})
     target_link_options(p2pdc_browser_record_store_smoke PRIVATE "-sNO_EXIT_RUNTIME=1")
     add_executable(p2pdc_browser_transport_smoke tests/browser_transport_main.cpp tests/browser_transport_smoke.cpp tests/browser_secure_attempt_smoke.cpp)
     target_link_libraries(p2pdc_browser_transport_smoke PRIVATE p2pdc::p2pdc)
-    target_compile_options(p2pdc_browser_transport_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(p2pdc_browser_transport_smoke PRIVATE ${p2pdc_warning_flags})
     target_link_options(p2pdc_browser_transport_smoke PRIVATE "-sNO_EXIT_RUNTIME=1")
     add_executable(p2pdc_browser_public_connection_smoke tests/browser_public_connection_main.cpp tests/node_connection_consumer.cpp tests/node_ice_validation_smoke.cpp tests/node_race_consumer.cpp tests/node_mixed_race.cpp tests/browser_native_public_peer.cpp tests/echo_example_pair.cpp examples/echo/echo_peer.cpp)
     target_link_libraries(p2pdc_browser_public_connection_smoke PRIVATE p2pdc::p2pdc)
-    target_compile_options(p2pdc_browser_public_connection_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(p2pdc_browser_public_connection_smoke PRIVATE ${p2pdc_warning_flags})
     target_link_options(p2pdc_browser_public_connection_smoke PRIVATE "-sNO_EXIT_RUNTIME=1")
 endif()
 
@@ -221,7 +223,7 @@ if(P2PDC_BUILD_BROWSER_SECURE)
     target_link_libraries(p2pdc_browser_secure PRIVATE p2pdc::p2pdc)
     target_include_directories(p2pdc_browser_secure PRIVATE ${SODIUM_INCLUDE_DIR})
     target_compile_options(p2pdc PRIVATE -fexceptions)
-    target_compile_options(p2pdc_browser_secure PRIVATE -fexceptions -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(p2pdc_browser_secure PRIVATE -fexceptions ${p2pdc_warning_flags})
     target_link_options(p2pdc_browser_secure PRIVATE --no-entry -fexceptions
         "-sDISABLE_EXCEPTION_CATCHING=0" "-sMODULARIZE=1" "-sEXPORT_ES6=1"
         "-sENVIRONMENT=web" "-sALLOW_MEMORY_GROWTH=1" "-sEXPORTED_FUNCTIONS=['_malloc','_free']"
@@ -259,7 +261,7 @@ if(BUILD_TESTING)
     if(P2PDC_ENABLE_OPENDHT AND UNIX AND NOT APPLE)
         add_executable(p2pdc_browser_record_native_peer EXCLUDE_FROM_ALL tests/browser_record_native_peer.cpp)
         target_link_libraries(p2pdc_browser_record_native_peer PRIVATE p2pdc::p2pdc ${p2pdc_opendht_target} msgpack-cxx)
-        target_compile_options(p2pdc_browser_record_native_peer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(p2pdc_browser_record_native_peer PRIVATE ${p2pdc_warning_flags})
     endif()
     add_executable(p2pdc_tests
         tests/callback_gate_test.cpp
@@ -300,7 +302,7 @@ if(BUILD_TESTING)
     endif()
     target_link_libraries(p2pdc_tests PRIVATE p2pdc::p2pdc GTest::gtest_main)
     target_compile_options(p2pdc_tests PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>
+        $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>
     )
     gtest_discover_tests(p2pdc_tests)
 
@@ -308,16 +310,16 @@ if(BUILD_TESTING)
         if(UNIX AND NOT APPLE)
             add_executable(p2pdc_browser_interop_peer EXCLUDE_FROM_ALL tests/browser_interop_peer.cpp)
             target_link_libraries(p2pdc_browser_interop_peer PRIVATE p2pdc::p2pdc LibDataChannel::LibDataChannel)
-            target_compile_options(p2pdc_browser_interop_peer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            target_compile_options(p2pdc_browser_interop_peer PRIVATE ${p2pdc_warning_flags})
             if(P2PDC_ENABLE_SODIUM)
                 add_executable(p2pdc_browser_secure_interop_peer EXCLUDE_FROM_ALL tests/browser_secure_interop_peer.cpp)
                 target_link_libraries(p2pdc_browser_secure_interop_peer PRIVATE p2pdc::p2pdc LibDataChannel::LibDataChannel)
-                target_compile_options(p2pdc_browser_secure_interop_peer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                target_compile_options(p2pdc_browser_secure_interop_peer PRIVATE ${p2pdc_warning_flags})
                 if(P2PDC_ENABLE_OPENDHT)
                     include(cmake/NativePublicPeerTargets.cmake)
                     add_executable(p2pdc_browser_windowed_dht_peer EXCLUDE_FROM_ALL tests/browser_windowed_dht_peer.cpp)
                     target_link_libraries(p2pdc_browser_windowed_dht_peer PRIVATE p2pdc::p2pdc ${p2pdc_opendht_target} msgpack-cxx)
-                    target_compile_options(p2pdc_browser_windowed_dht_peer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                    target_compile_options(p2pdc_browser_windowed_dht_peer PRIVATE ${p2pdc_warning_flags})
                 endif()
             endif()
         endif()
@@ -332,7 +334,7 @@ if(BUILD_TESTING)
         target_link_libraries(p2pdc_native_transport_tests PRIVATE p2pdc::p2pdc
             LibDataChannel::LibDataChannel GTest::gtest_main)
         target_compile_options(p2pdc_native_transport_tests PRIVATE
-            $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>
+            $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>
         )
         gtest_discover_tests(p2pdc_native_transport_tests PROPERTIES TIMEOUT 90)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND P2PDC_ENABLE_OPENDHT AND P2PDC_TEST_OPENDHT AND P2PDC_ENABLE_SODIUM)
@@ -353,7 +355,7 @@ if(BUILD_TESTING)
             target_link_libraries(p2pdc_native_turn_tests PRIVATE ${p2pdc_opendht_target} msgpack-cxx)
         endif()
         target_compile_options(p2pdc_native_turn_tests PRIVATE
-            $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>
+            $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>
         )
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_executable(p2pdc_native_auto_turn_tests EXCLUDE_FROM_ALL tests/native_turn_test.cpp)
@@ -361,7 +363,7 @@ if(BUILD_TESTING)
             target_link_libraries(p2pdc_native_auto_turn_tests PRIVATE p2pdc::p2pdc
                 LibDataChannel::LibDataChannel GTest::gtest_main)
             target_compile_options(p2pdc_native_auto_turn_tests PRIVATE
-                $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+                $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
         endif()
     endif()
 
@@ -377,7 +379,7 @@ if(BUILD_TESTING)
                 add_executable(p2pdc_identity_disabled_test EXCLUDE_FROM_ALL tests/native_node_identity_disabled_test.cpp)
                 target_link_libraries(p2pdc_identity_disabled_test PRIVATE p2pdc::p2pdc GTest::gtest_main)
                 target_compile_options(p2pdc_identity_disabled_test PRIVATE
-                    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+                    $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>)
             endif()
         endif()
         if(P2PDC_ENABLE_SODIUM OR P2PDC_ENABLE_OPENDHT)
@@ -393,7 +395,7 @@ if(BUILD_TESTING)
             endif()
         endif()
         target_compile_options(p2pdc_opendht_tests PRIVATE
-            $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>
+            $<$<CXX_COMPILER_ID:GNU,Clang>:${p2pdc_warning_flags}>
         )
         gtest_discover_tests(p2pdc_opendht_tests PROPERTIES TIMEOUT 75)
     endif()
