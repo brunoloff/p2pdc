@@ -1,4 +1,5 @@
 #include "native_runner_owner.hpp"
+#include "join_retry.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -11,18 +12,9 @@
 namespace p2pdc::detail {
 namespace {
 std::exception_ptr join_until_stopped(dht::DhtRunner &runner) {
-    std::exception_ptr first_failure;
-    for (;;) {
-        try {
-            runner.join();
-            return first_failure;
-        } catch (...) {
-            if (!first_failure) {
-                first_failure = std::current_exception();
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-    }
+    return join_with_retry(
+        [&runner] { runner.join(); },
+        [](std::chrono::milliseconds delay) { std::this_thread::sleep_for(delay); });
 }
 } // namespace
 

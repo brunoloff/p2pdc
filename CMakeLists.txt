@@ -275,6 +275,7 @@ if(BUILD_TESTING)
         tests/wall_clock_test.cpp
         tests/callback_failure_test.cpp
         tests/rate_window_test.cpp
+        tests/join_retry_test.cpp
         tests/operation_test.cpp
         tests/route_test.cpp
         tests/browser_ice_config_test.cpp
