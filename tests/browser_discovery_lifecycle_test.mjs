@@ -55,13 +55,15 @@ test("watch receives verified events, sweeps and suppresses late callbacks", asy
     assert.equal(f.timers.size, 0); assert.equal(watch.healthy(), false);
 });
 
-test("watch clock regression terminates and reports once", async () => {
+test("watch absorbs a small clock regression, terminates on a large one and reports once", async () => {
     const f = fixture();
     const watch = new BrowserWatch(f.module, f.proxy, f.options, { onPeer: () => {}, onCatchup: () => {},
         onError: (error) => f.errors.push(error) }, f.clockOptions);
     const started = watch.start(); f.opened.resolve(true); f.lookup.resolve([]); await started;
     f.record([1]); await settle();
     f.setNow(999); f.fire(); await settle();
+    assert.deepEqual(f.errors, []); assert.equal(watch.healthy(), true);
+    f.setNow(969); f.fire(); await settle();
     assert.deepEqual(f.errors, ["clock"]); assert.equal(watch.healthy(), false);
     watch.close();
 });
@@ -171,12 +173,14 @@ test("lease expires pending publication and honors publication limit", async () 
     assert.deepEqual(g.errors, ["publicationLimit"]); limited.close();
 });
 
-test("lease rejects regressing clocks and close suppresses late callbacks", async () => {
+test("lease absorbs small clock regressions, fails on large ones, and close suppresses late callbacks", async () => {
     const f = fixture();
     const lease = new BrowserLease(f.module, f.proxy, f.options, { onPublished: () => f.events.push("published"),
         onError: (error) => f.errors.push(error) }, f.clockOptions);
     assert.equal(lease.start(), true); await settle(); f.writes[0].resolve(); await settle();
-    f.setNow(999); assert.equal(lease.self(), null); await settle();
+    f.setNow(999); assert.notEqual(lease.self(), null); await settle();
+    assert.deepEqual(f.errors, []);
+    f.setNow(969); assert.equal(lease.self(), null); await settle();
     assert.deepEqual(f.errors, ["clock"]); lease.close();
     const g = fixture();
     const other = new BrowserLease(g.module, g.proxy, g.options, { onPublished: () => g.events.push("published"),

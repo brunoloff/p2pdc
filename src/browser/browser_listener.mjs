@@ -22,7 +22,8 @@ export class BrowserListener {
         if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 100 || this.timeoutMs > 30000)
             throw new RangeError("invalid request timeout");
         ({ timers: this.timers } = timing(options));
-        this.deadlineNow = options.deadlineNow ?? (() => Date.now());
+        // Consent deadlines measure elapsed time, so default to a monotonic clock.
+        this.deadlineNow = options.deadlineNow ?? (() => Math.floor(performance.now()));
         if (typeof this.deadlineNow !== "function") throw new TypeError("invalid deadline clock");
         this.lastDeadlineTime = null; this.deadline = null;
         this.handlers = handlers; this.watch = watch; this.state = "new"; this.epoch = 0;

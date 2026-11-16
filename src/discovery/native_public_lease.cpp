@@ -1,9 +1,9 @@
 #include "native_public_watch.hpp"
 
 #include "../core/deferred_events.hpp"
+#include "../core/wall_clock.hpp"
 #include "native_discovery_cycle.hpp"
 
-#include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
@@ -197,15 +197,6 @@ DiscoveryCycleCallbacks PublicLease::callbacks() {
             }};
 }
 
-std::uint64_t now_seconds() {
-    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
-                             std::chrono::system_clock::now().time_since_epoch())
-                             .count();
-    if (seconds < 0) {
-        throw std::runtime_error("system clock is before the Unix epoch");
-    }
-    return static_cast<std::uint64_t>(seconds);
-}
 
 } // namespace
 
@@ -242,7 +233,7 @@ LeaseBackendResult make_public_lease(RecordStore store,
                                    {65536, 1, 1024},
                                    options.protocol == DiscoveryProtocol::RotatingKeysV2};
     DiscoveryCycleConfig config{store, store,  endpoint.identity->signing, secret, {},
-                                lease, budget, options.pulse_interval,     1,      now_seconds};
+                                lease, budget, options.pulse_interval,     1,      forward_utc_seconds};
     std::weak_ptr<PublicLease> weak = state;
     Executor cycle_executor = [weak, executor = std::move(executor)](auto task) {
         if (auto self = weak.lock()) {

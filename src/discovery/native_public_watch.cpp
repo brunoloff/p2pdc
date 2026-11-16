@@ -1,6 +1,7 @@
 #include "native_public_watch.hpp"
 
 #include "../core/deferred_events.hpp"
+#include "../core/wall_clock.hpp"
 #include "native_discovery_cycle.hpp"
 
 #include <algorithm>
@@ -267,18 +268,6 @@ void validate_watch(const Scheduler &scheduler, const WatchOptions &options,
     }
 }
 
-namespace {
-std::uint64_t now_seconds() {
-    const auto value = std::chrono::duration_cast<std::chrono::seconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-    if (value < 0) {
-        throw std::runtime_error("system clock is before the Unix epoch");
-    }
-    return static_cast<std::uint64_t>(value);
-}
-} // namespace
-
 DiscoveryBackendResult make_public_watch(RecordStore store, DiscoveryCapability capability,
                                          Scheduler scheduler, WatchOptions options,
                                          DiscoveryHandlers handlers, Executor executor,
@@ -298,7 +287,7 @@ DiscoveryBackendResult make_public_watch(RecordStore store, DiscoveryCapability 
                                 RecoveryOptions{options.max_recovery_retries,
                                                 options.recovery_delay, std::chrono::minutes(1)}};
     DiscoveryCycleConfig config{
-        store, store, {}, secret, limits, {}, budget, options.pulse_interval, 1, now_seconds};
+        store, store, {}, secret, limits, {}, budget, options.pulse_interval, 1, forward_utc_seconds};
     std::weak_ptr<PublicWatch> weak = state;
     Executor cycle_executor = [weak, executor = std::move(executor)](auto task) {
         if (auto self = weak.lock()) {

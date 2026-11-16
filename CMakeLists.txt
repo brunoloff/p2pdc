@@ -38,6 +38,7 @@ add_library(p2pdc
     src/core/timer_producer.cpp
     src/core/memory_budget.cpp src/core/ice_config_validation.cpp
     src/core/route.cpp
+    src/core/wall_clock.cpp
     src/discovery/incoming.cpp
     src/discovery/native_mailbox.cpp src/discovery/recovering_mailbox.cpp
     src/discovery/native_outbox.cpp
@@ -269,6 +270,7 @@ if(BUILD_TESTING)
         tests/submission_gate_test.cpp
         tests/inbound_queue_test.cpp
         tests/memory_budget_test.cpp
+        tests/wall_clock_test.cpp
         tests/operation_test.cpp
         tests/route_test.cpp
         tests/browser_ice_config_test.cpp

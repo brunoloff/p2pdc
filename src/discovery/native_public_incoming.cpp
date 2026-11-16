@@ -2,6 +2,7 @@
 #include "terminal_signal.hpp"
 
 #include "../core/timer_producer.hpp"
+#include "../core/wall_clock.hpp"
 #include "../security/signaling_limits.hpp"
 
 #include <iostream>
@@ -10,14 +11,6 @@
 #include <utility>
 
 namespace p2pdc::detail {
-static std::uint64_t utc_seconds() {
-    const auto value = std::chrono::duration_cast<std::chrono::seconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-    if (value < 0)
-        throw std::runtime_error("system clock is before the Unix epoch");
-    return static_cast<std::uint64_t>(value);
-}
 
 PublicIncoming::PublicIncoming(RecordStore store, IncomingContext initial,
                                std::function<std::optional<IncomingContext>()> context,
@@ -65,7 +58,7 @@ std::optional<IncomingError> PublicIncoming::start() {
                                                 self->check_cancel(wire);
                                         }};
     auto created =
-        NativeIncomingListener::create(store_, initial_, context_, utc_seconds, executor_,
+        NativeIncomingListener::create(store_, initial_, context_, forward_utc_seconds, executor_,
                                        MemoryBudget(1024 * 1024), std::move(callbacks), replay_);
     if (auto error = std::get_if<StoreError>(&created))
         return incoming_error(*error);
@@ -298,7 +291,7 @@ void PublicIncoming::check_cancel(const Bytes &wire) noexcept {
                             : state_ != IncomingState::Pending || !entry)
         return;
     try {
-        const auto now = utc_seconds();
+        const auto now = forward_utc_seconds();
         const auto &local = initial_.local.endpoint;
         SignalingRecipient recipient{signing_key_, local.fields.instance_id};
         auto decoded = decode_signaling(

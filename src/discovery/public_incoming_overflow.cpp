@@ -1,24 +1,16 @@
 #include "../security/signaling_limits.hpp"
+#include "../core/wall_clock.hpp"
 #include "public_incoming_impl.hpp"
 #include "terminal_signal.hpp"
 
 #include <iostream>
 #include <limits>
-#include <stdexcept>
 
 namespace p2pdc::detail {
-static std::uint64_t utc_seconds() {
-    const auto value = std::chrono::duration_cast<std::chrono::seconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-    if (value < 0)
-        throw std::runtime_error("system clock is before the Unix epoch");
-    return static_cast<std::uint64_t>(value);
-}
 
 void PublicIncoming::reject_offer(const IncomingOffer &offer) noexcept {
     try {
-        const auto now = utc_seconds();
+        const auto now = forward_utc_seconds();
         if (now > std::numeric_limits<std::uint64_t>::max() - 50)
             throw std::overflow_error("rejection expiry overflow");
         const auto &remote = offer.peer;

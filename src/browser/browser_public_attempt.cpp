@@ -1,8 +1,7 @@
 #include "../transport/public_attempt.hpp"
+#include "../core/wall_clock.hpp"
 #include "browser_public_config.hpp"
 
-#include <chrono>
-#include <stdexcept>
 #include <utility>
 
 namespace p2pdc::detail {
@@ -113,14 +112,6 @@ ConnectionAttemptStart BrowserPublicAttempt::poll_start() {
     }
     return ConnectionAttemptStart::Failed;
 }
-std::uint64_t now_seconds() {
-    const auto value = std::chrono::duration_cast<std::chrono::seconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-    if (value < 0)
-        throw std::runtime_error("system clock is before the Unix epoch");
-    return static_cast<std::uint64_t>(value);
-}
 } // namespace
 
 std::variant<std::unique_ptr<PublicAttempt>, StoreError>
@@ -128,7 +119,7 @@ make_public_attempt(const ConnectionAdmission &admission, const IncomingOffer *o
                     MemoryBudget budget, std::uint32_t message_limit, Executor executor,
                     ConnectionAttemptCallbacks callbacks) {
     auto config = make_browser_public_config(admission, offer, std::move(ice), std::move(budget),
-                                             message_limit, now_seconds);
+                                             message_limit, forward_utc_seconds);
     auto state = std::make_shared<State>();
     state->callbacks = std::move(callbacks);
     auto created =

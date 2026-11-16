@@ -41,6 +41,9 @@ struct WatchOptions {
     std::size_t max_pending_events = 128;
     std::chrono::milliseconds pulse_interval{500};
     std::uint64_t max_advertisement_lifetime = 300;
+    // Wall-clock steps backwards of up to 30 seconds are absorbed by holding
+    // the library's time; a larger step reports WatchError::Clock (or the
+    // lease/listener equivalent) and the operation must be recreated.
     std::uint64_t clock_skew = 30;
     // Rotating mode requires max_advertisement_lifetime + 2 * clock_skew <= 840 seconds.
     DiscoveryProtocol protocol = DiscoveryProtocol::RotatingKeysV2;
