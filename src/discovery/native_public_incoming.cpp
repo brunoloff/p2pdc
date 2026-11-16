@@ -201,7 +201,8 @@ void PublicIncoming::receive(IncomingOffer offer) noexcept {
                               std::chrono::steady_clock::now() + options_.request_timeout);
         if (!id) {
             if (options_.persistent) {
-                reject_offer(offer);
+                if (overflow_rejections_.admit())
+                    reject_offer(offer);
                 report_overflow();
                 return;
             }

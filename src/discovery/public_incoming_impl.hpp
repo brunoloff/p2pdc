@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/timer_producer.hpp"
+#include "../core/rate_window.hpp"
 #include "native_public_incoming.hpp"
 #include "pending_offers.hpp"
 
@@ -63,6 +64,9 @@ class PublicIncoming final : public IncomingBackend,
     PendingOffers offers_;
     std::optional<PendingOffers::Id> pending_id_;
     IncomingState state_ = IncomingState::Listening;
+    // Overflow rejections are signed puts a flood of offers can trigger;
+    // bound them so the listener cannot be used to amplify DHT writes.
+    RateWindow overflow_rejections_{8, std::chrono::seconds(10)};
     bool overflow_queued_ = false;
 };
 } // namespace p2pdc::detail
