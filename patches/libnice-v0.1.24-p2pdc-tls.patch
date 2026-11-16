@@ -12,7 +12,7 @@ index 7404fa9..3ea5040 100644
  typedef gboolean (*NiceTimeoutLockedCallback)(NiceAgent *agent,
      gpointer user_data);
 diff --git a/agent/agent.c b/agent/agent.c
-index a5568d6..0c09a61 100644
+index a5568d6..264a81d 100644
 --- a/agent/agent.c
 +++ b/agent/agent.c
 @@ -2900,7 +2900,7 @@ stun_server_resolved_cb (GObject *src, GAsyncResult *result,
@@ -24,20 +24,25 @@ index a5568d6..0c09a61 100644
  {
    NiceAddress proxy_server;
    NiceAddress local_address = nicesock->addr;
-@@ -2956,7 +2956,12 @@ agent_create_tcp_turn_socket (NiceAgent *agent, NiceStream *stream,
+@@ -2956,7 +2956,17 @@ agent_create_tcp_turn_socket (NiceAgent *agent, NiceStream *stream,
            agent->compatibility == NICE_COMPATIBILITY_OC2007R2)) {
      nicesock = nice_pseudossl_socket_new (nicesock,
          NICE_PSEUDOSSL_SOCKET_COMPATIBILITY_MSOC);
 +  } else if (type == NICE_RELAY_TYPE_TURN_TLS &&
 +      agent->compatibility == NICE_COMPATIBILITY_RFC5245) {
 +    nicesock = nice_tls_socket_new (nicesock, server, hostname);
++  } else if (type == NICE_RELAY_TYPE_TURN_TLS) {
++    /* p2pdc: no TLS implementation for this compatibility mode; refuse the
++     * relay rather than send TURN credentials and traffic over plain TCP. */
++    nice_socket_free (nicesock);
++    nicesock = NULL;
    }
 +  if (nicesock == NULL)
 +    return NULL;
    return nice_udp_turn_over_tcp_socket_new (nicesock,
        agent_to_turn_socket_compatibility (agent));
  }
-@@ -3017,7 +3022,7 @@ priv_add_new_candidate_discovery_turn (NiceAgent *agent,
+@@ -3017,7 +3027,7 @@ priv_add_new_candidate_discovery_turn (NiceAgent *agent,
      }
  
      cdisco->nicesock = agent_create_tcp_turn_socket (agent, stream,
@@ -46,7 +51,7 @@ index a5568d6..0c09a61 100644
      if (!cdisco->nicesock) {
        goto skip;
      }
-@@ -3282,6 +3287,12 @@ resolve_turn_in_context (NiceAgent *agent, gpointer data)
+@@ -3282,6 +3292,12 @@ resolve_turn_in_context (NiceAgent *agent, gpointer data)
    return G_SOURCE_REMOVE;
  }
  
