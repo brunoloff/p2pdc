@@ -137,6 +137,9 @@ keep-alive lines.
   documents.
 - **L23 The libnice patch now resolves IP literals asynchronously
   (speculative).** Investigate.
+- **L24 (found while testing) The shared-text example breaks embedded
+  builds.** `P2PDC_BUILD_SHARED_TEXT` defaulted to ON even when p2pdc was
+  embedded, so `p2pdc_opendht_embedded_target` failed to configure.
 
 ### Design suggestions
 
@@ -154,3 +157,77 @@ keep-alive lines.
 Each fix is built with one job at low priority in `build-native` and its
 targeted tests are run serially. Browser (`.mjs`) changes are checked with the
 existing Node-based tests where they exist.
+
+## Resolution
+
+Each item was fixed in its own commit on `audit-fixes`, in priority order,
+except where noted. "No change" means the investigation showed the code was
+already correct; the commit or note records why.
+
+| Item | Outcome | Commit |
+| --- | --- | --- |
+| #1 | Over-limit records are dropped and counted; watches, mailboxes and listeners stay open (native, browser C++ and JS proxy). | `85b22ff` |
+| #2 | Full replay history drops new offers (no early eviction); unknown-peer table evicts oldest; full tracker ignores new peers. The public pending-event queue still fails on overflow, deliberately. | `1ca2ef8` |
+| #3 | Relay-only mode filters signaled candidates and SDP. Also fixed a confirmed leak: libnice put the LAN address in relay candidates' `raddr`. | `cef2f1e` |
+| #4 | Backward steps up to 30 s are absorbed; larger ones still fail and recreated components work. | `f483dc7`, `3c588c9` |
+| #5 | Exponential retry backoff, expired pending records republished, publication budget per 120 s window in both protocols. | `ff239e1` |
+| #6 | `CallbackGate::post` releases its slot when the executor throws. | `5b6b2d3` |
+| #7 | Opt-in `AnnounceOptions::fresh_identity`; default kept because `Node::identity()` is public API. Per-lease inbox rotation is a protocol change left for the freeze. | `617161d` |
+| #8 | No change: every internal caller of the throwing send catches; audit recorded in DEPENDENCIES.md. | `693e1ea` |
+| #9 | Patched libnice refuses TURN-TLS in modes without TLS. | `2a669d0` |
+| #10 | Idle listen streams restart transparently; per-stream record rate cap; blank lines tolerated. | `42677aa` |
+| L1 | Capability copies wiped on release. | `5348bd8` |
+| L2 | Inbound messages capped at one control record until the handshake completes. | `4828020` |
+| L3 | Callback exceptions logged, not rethrown. | `9c1c497` |
+| L4 | `P2PDC_HARDENING` (default on) and `P2PDC_WERROR` (top-level default). | `c8b90b9` |
+| L5 | Android clones verified by commit; `patches/SHA256SUMS`. | `45fb575` (checksums updated in `57aaa3d`) |
+| L6 | Writable threshold at a quarter of the buffer limit, native and browser. | `5b6bc16` |
+| L7 | Duplicated time helpers replaced by `src/core/wall_clock`. | `f483dc7` |
+| L8 | `aqtinstall.log` ignored; `bin/` was a false finding (launcher scripts). | `aaf52bc` |
+| L9 | Shared TURN-TLS `SSL_CTX`; no partial wildcards. | `57aaa3d` |
+| L10 | No change: not reachable for honest peers; reasoning recorded in code comments. | `caacce1` |
+| L11 | Application messages delivered without a second copy. | `763de7e` |
+| L12 | WebAssembly secret-handling limits documented. | `4a30e90` |
+| L13 | Cancel checks skip records whose size cannot be a cancel. | `7fbf933` |
+| L14 | Consumed requests rejected when accepting fails; single-shot behaviour documented. | `c0f5196` |
+| L15 | Overflow rejections limited to 8 per 10 s per listener. | `7e27812` |
+| L16 | Inline executors detected and rejected instead of deadlocking. | `bebebbb` |
+| L17 | Join retries back off to 5 s and log once (still retried; returning early is unsafe). | `5958e4e` |
+| L18 | Capability compared with `sodium_memcmp`. | `4e3389f` |
+| L19 | Proxy lookups stop reading after the inspection bound. | `9cd89ee` |
+| L20 | Host names restricted to host-name characters. | `f709bed` |
+| L21 | Invalid bridge events reported as transport errors. | `45e12c3` |
+| L22 | Handshake and framing specs aligned with the code. | `3104941` |
+| L23 | No change: resolution is decided by `nice_address_is_valid(&turn->server)`, not by `server_address`, so IP literals are not resolved asynchronously. | none |
+| L24 | Example defaults to ON only at top level; embedded test uses a clean directory. | `fdf03f7` |
+| S1 | Public signatures carry `application_signature_domain`; protocol code uses internal raw signing. | `7b2adfa` |
+| S2 | Deferred: browsers do not expose the DTLS exporter, so binding cannot be symmetric. Protocol-freeze item in TODO.md. | none |
+| S3 | Identity shared through the handshake chain. | `cd12029` |
+| S4 | Deferred: internal drop counters exist (`StoreBatch::dropped`, `InboundQueue::dropped()`); exposing them publicly needs plumbing through six native layers and the browser path. | none |
+| S5 | `FixedKeyV1` documented as deprecated. | `243aa93` |
+
+### Behaviour changes for applications
+
+- Over-limit DHT records, full replay/peer tables and small clock regressions
+  no longer end watches, leases or listeners.
+- Leases survive outages instead of failing with an expired pending record.
+- `Identity::sign` / `verify_signature` now apply an application prefix.
+- `HandshakeExchange` takes `std::shared_ptr<const Identity>`.
+- ICE hosts accept only host-name characters (no IPv6 zone identifiers).
+- Executors that run tasks inline are rejected with `std::logic_error`.
+- `-Werror` and the shared-text example default to ON only at top level.
+
+### Final verification
+
+The complete native suite in `build-native` (596 tests, hardening flags on)
+passed serially, and every JS unit test file passed except the two
+`*_live_test.mjs` files, which require a running OpenDHT proxy.
+
+### Not verified
+
+- Browser smokes that need Chromium in a network namespace were built but not
+  run (affects the L21 smoke check).
+- Relay-only behaviour on real networks remains unverified (TODO.md).
+- Android builds were not rebuilt.
+- One intermittent failure of `ExchangesLargeFragmentedMessagesWithinConfiguredLimits`
+  was seen once and did not reproduce in later runs.

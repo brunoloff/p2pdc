@@ -90,6 +90,9 @@ without requiring a fixed coordinator or prescribing a connection topology.
 - [ ] Decide which operation/connection identifiers and counters to expose.
 - [ ] Review and freeze the protocol, including identity binding, replay
   protection, authorization, key handling, and SDP/fingerprint binding.
+  Consider: rotating the signaling inbox within a lease (audit #7), binding
+  the handshake to the DTLS exporter where both sides can (audit S2; browsers
+  do not expose it), and exposing dropped-record diagnostics (audit S4).
 - [ ] Extend adversarial and sanitizer testing of parsers, authenticated input,
   object lifetimes, and concurrency.
 - [ ] Document security boundaries and what discovery, proxies, and TURN can
