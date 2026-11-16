@@ -201,6 +201,10 @@ NativeLinkCallbacks NativeAttempt::Impl::link_callbacks() {
     out.on_message = [weak](Bytes value) {
         if (auto self = weak.lock(); self && self->status != NativeAttemptState::Failed &&
                                      self->status != NativeAttemptState::Closed) {
+            // Messages are delivered only after the Ready notification, which
+            // creates the gate; the handshake context exists by then because
+            // the local description task precedes readiness on the FIFO
+            // executor. A message without a gate is a protocol violation.
             if (self->gate)
                 self->gate->on_message(value);
             else

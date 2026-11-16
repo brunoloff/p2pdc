@@ -119,6 +119,9 @@ void SecureChannel::set_transport_ready(bool ready) {
 void SecureChannel::on_frame(ByteView frame) {
     if (stopped_)
         return;
+    // start() runs as soon as both descriptions are installed, which precedes
+    // any data-channel traffic (ICE and DTLS need them), so an honest peer's
+    // frame cannot arrive before the gate exists.
     if (!gate_) {
         fail(SecureFailure::Protocol);
         return;
