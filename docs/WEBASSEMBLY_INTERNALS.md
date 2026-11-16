@@ -298,3 +298,22 @@ python tests/browser_interop_server.py --secure ./build-native/p2pdc_browser_sec
 
 This forwards signed encrypted test signaling through the same local harness.
 It uses fixed test keys and does not exercise OpenDHT discovery or TURN.
+
+## Secret handling limits
+
+Signing seeds, recipient secrets and capabilities reach WebAssembly through
+JavaScript buffers. The JS adapters zero the heap copies they pass in
+(`wasm_secure_link.mjs`, `browser_owner_utils.mjs`) and native code keeps
+private keys in `sodium_malloc` storage and capabilities in wiped shared
+buffers. In WebAssembly these measures are weaker than natively:
+
+- `sodium_malloc` cannot lock pages or add guard pages; its memory is part of
+  the module's linear memory, which any script in the page can read.
+- JavaScript strings, typed-array copies and garbage-collected objects that
+  held a secret before it was copied into the module cannot be wiped reliably.
+- Linear memory only grows; freed regions are reused but not returned to the
+  browser, so a wiped buffer is the only protection against later reads.
+
+Treat every secret given to the browser build as readable by all code running
+in the same page, including third-party scripts and extensions with page
+access.
