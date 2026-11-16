@@ -209,10 +209,10 @@ index 45cdbf4..ece30a3 100644
  #include "udp-turn.h"
 diff --git a/socket/tls.c b/socket/tls.c
 new file mode 100644
-index 0000000..fc4879e
+index 0000000..d90e653
 --- /dev/null
 +++ b/socket/tls.c
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,353 @@
 +#ifdef HAVE_CONFIG_H
 +#include "config.h"
 +#endif
@@ -292,19 +292,44 @@ index 0000000..fc4879e
 +    g_object_unref (ip);
 +    return result;
 +  }
++  SSL_set_hostflags (ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
 +  return SSL_set_tlsext_host_name (ssl, hostname) == 1 && SSL_set1_host (ssl, hostname) == 1;
++}
++
++/* One verifying client context is shared by all TURN-TLS sockets so the
++ * trust store is loaded once. A failed creation is not cached. Each socket
++ * holds its own reference. */
++static SSL_CTX *
++shared_client_context (void)
++{
++  static GMutex lock;
++  static SSL_CTX *shared = NULL;
++  SSL_CTX *result = NULL;
++  g_mutex_lock (&lock);
++  if (!shared) {
++    SSL_CTX *created = SSL_CTX_new (TLS_client_method ());
++    if (created && SSL_CTX_set_min_proto_version (created, TLS1_2_VERSION) == 1 &&
++        SSL_CTX_set_default_verify_paths (created) == 1) {
++      SSL_CTX_set_options (created, SSL_OP_NO_RENEGOTIATION);
++      SSL_CTX_set_verify (created, SSL_VERIFY_PEER, NULL);
++      shared = created;
++    } else {
++      SSL_CTX_free (created);
++    }
++  }
++  if (shared && SSL_CTX_up_ref (shared) == 1)
++    result = shared;
++  g_mutex_unlock (&lock);
++  return result;
 +}
 +
 +static gboolean
 +initialize_tls (TlsSocket *tls, const gchar *hostname)
 +{
 +  BIO *input, *output;
-+  tls->context = SSL_CTX_new (TLS_client_method ());
-+  if (!tls->context || SSL_CTX_set_min_proto_version (tls->context, TLS1_2_VERSION) != 1 ||
-+      SSL_CTX_set_default_verify_paths (tls->context) != 1)
++  tls->context = shared_client_context ();
++  if (!tls->context)
 +    return FALSE;
-+  SSL_CTX_set_options (tls->context, SSL_OP_NO_RENEGOTIATION);
-+  SSL_CTX_set_verify (tls->context, SSL_VERIFY_PEER, NULL);
 +  tls->ssl = SSL_new (tls->context);
 +  if (!tls->ssl || !set_identity (tls->ssl, hostname))
 +    return FALSE;
