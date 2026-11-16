@@ -23,7 +23,9 @@ struct NativeAdvertisementLease::State : std::enable_shared_from_this<State> {
     MemoryBudget budget;
     Executor executor;
     std::unique_ptr<NativeOutbox> outbox;
+    DiscoveryKey key{};
     std::optional<std::uint64_t> window;
+    std::optional<std::uint64_t> budget_window;
     std::optional<std::uint64_t> last_now;
     std::optional<AdvertisementFields> published_fields;
     std::uint64_t next_refresh = 0;
@@ -45,8 +47,11 @@ struct NativeAdvertisementLease::State : std::enable_shared_from_this<State> {
           budget(std::move(publisher_budget)), executor(std::move(publisher_executor)) {}
     void fail(AdvertisementLeaseFailure error);
     void complete();
+    void abandon_expired();
+    void replace_outbox(const DiscoveryKey &next);
     [[nodiscard]] std::optional<std::uint64_t> time();
     [[nodiscard]] AdvertisementLeaseTick publish(std::uint64_t current);
+    void reset_budget(std::uint64_t current);
     [[nodiscard]] bool prepare_window(std::uint64_t current);
     [[nodiscard]] bool can_publish(std::uint64_t current);
     [[nodiscard]] OutboxCallbacks handlers();
@@ -65,7 +70,7 @@ void NativeAdvertisementLease::State::complete() {
         if (!current)
             return;
         if (*current >= pending_expiry) {
-            fail(AdvertisementLeaseFailure::ExpiredPending);
+            abandon_expired();
             return;
         }
         pending = false;
@@ -80,6 +85,24 @@ void NativeAdvertisementLease::State::complete() {
         fail(AdvertisementLeaseFailure::EncodingFailed);
     }
 }
+void NativeAdvertisementLease::State::replace_outbox(const DiscoveryKey &next) {
+    auto replacement =
+        std::make_unique<NativeOutbox>(store, next, budget, config.outbox, executor, handlers());
+    outbox->close();
+    outbox = std::move(replacement);
+    key = next;
+}
+
+// A pending record that outlived its lifetime (for example during an outage)
+// is discarded with its outbox; the next tick publishes a fresh record, so an
+// outage longer than the lifetime no longer ends the lease.
+void NativeAdvertisementLease::State::abandon_expired() {
+    replace_outbox(key);
+    pending = false;
+    paused = false;
+    next_refresh = 0;
+}
+
 std::optional<std::uint64_t> NativeAdvertisementLease::State::time() {
     const auto current = now();
     if (last_now && current < *last_now) {
@@ -90,23 +113,28 @@ std::optional<std::uint64_t> NativeAdvertisementLease::State::time() {
     return current;
 }
 
-bool NativeAdvertisementLease::State::prepare_window(std::uint64_t current) {
-    if (!config.windowed)
-        return true;
+// The publication budget applies per discovery window in both protocols, so a
+// fixed-key lease is no longer exhausted after max_publications refreshes.
+void NativeAdvertisementLease::State::reset_budget(std::uint64_t current) {
     const auto next = discovery_window_for(current);
-    if (window && *window == next)
+    if (budget_window != next) {
+        budget_window = next;
+        publications = 0;
+    }
+}
+
+bool NativeAdvertisementLease::State::prepare_window(std::uint64_t current) {
+    reset_budget(current);
+    const auto next = discovery_window_for(current);
+    if (!config.windowed || (window && *window == next))
         return true;
-    auto key = derive_discovery_window_key(*capability, next);
-    if (std::holds_alternative<CryptoError>(key)) {
+    auto derived = derive_discovery_window_key(*capability, next);
+    if (std::holds_alternative<CryptoError>(derived)) {
         fail(AdvertisementLeaseFailure::EncodingFailed);
         return false;
     }
-    auto replacement = std::make_unique<NativeOutbox>(store, std::get<DiscoveryKey>(key), budget,
-                                                      config.outbox, executor, handlers());
-    outbox->close();
-    outbox = std::move(replacement);
+    replace_outbox(std::get<DiscoveryKey>(derived));
     window = next;
-    publications = 0;
     return true;
 }
 
@@ -191,16 +219,16 @@ NativeAdvertisementLease::create(RecordStore store, std::shared_ptr<const Identi
         !nonzero(config.fields.instance_id) || !nonzero(config.fields.signaling_inbox)) {
         throw std::invalid_argument("invalid native advertisement lease configuration");
     }
-    auto key = config.windowed ? derive_discovery_window_key(*capability, 0)
-                               : derive_discovery_key(*capability);
-    if (auto *error = std::get_if<CryptoError>(&key))
+    auto derived = config.windowed ? derive_discovery_window_key(*capability, 0)
+                                   : derive_discovery_key(*capability);
+    if (auto *error = std::get_if<CryptoError>(&derived))
         return *error;
     auto state = std::make_shared<State>(std::move(identity), std::move(capability), config,
                                          std::move(now), std::move(callbacks), std::move(store),
                                          std::move(budget), std::move(executor));
-    state->outbox =
-        std::make_unique<NativeOutbox>(state->store, std::get<DiscoveryKey>(key), state->budget,
-                                       config.outbox, state->executor, state->handlers());
+    state->key = std::get<DiscoveryKey>(derived);
+    state->outbox = std::make_unique<NativeOutbox>(
+        state->store, state->key, state->budget, config.outbox, state->executor, state->handlers());
     if (config.windowed)
         state->window = 0;
     return std::unique_ptr<NativeAdvertisementLease>(
@@ -221,10 +249,8 @@ AdvertisementLeaseTick NativeAdvertisementLease::tick() {
         auto current = state->time();
         if (!current)
             return AdvertisementLeaseTick::Failed;
-        if (state->pending && *current >= state->pending_expiry) {
-            state->fail(AdvertisementLeaseFailure::ExpiredPending);
-            return AdvertisementLeaseTick::Failed;
-        }
+        if (state->pending && *current >= state->pending_expiry)
+            state->abandon_expired();
         if (state->pending)
             return AdvertisementLeaseTick::Pending;
         if (state->last_now && *current < state->next_refresh)
@@ -246,9 +272,11 @@ bool NativeAdvertisementLease::retry() {
         if (!current)
             return false;
         if (*current >= state->pending_expiry) {
-            state->fail(AdvertisementLeaseFailure::ExpiredPending);
+            state->abandon_expired();
             return false;
         }
+        // A retry keeps the pending record's key; only the budget follows time.
+        state->reset_budget(*current);
         if (state->publications >= state->config.max_publications) {
             state->fail(AdvertisementLeaseFailure::PublicationLimit);
             return false;

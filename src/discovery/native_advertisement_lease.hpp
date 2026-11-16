@@ -12,7 +12,6 @@ enum class AdvertisementLeaseFailure {
     SequenceExhausted,
     EncodingFailed,
     AdmissionFailed,
-    ExpiredPending,
     PublisherUnavailable,
     PublicationLimit
 };
@@ -40,12 +39,14 @@ struct AdvertisementLeaseCallbacks {
 // destroy the lease. tick is caller-scheduled and uses nondecreasing UTC seconds.
 // The configured sequence is used first; configured issue and expiry fields
 // are replaced by the current time and lifetime for every fresh record.
-// Retry republishes the exact pending bytes; if they expire, the lease fails and
-// the owner must replace it with a fresh instance. Published means backend put
+// Retry republishes the exact pending bytes; if they expire first (for example
+// during an outage), they are discarded and the next tick publishes a fresh
+// record with a new sequence. Published means backend put
 // completion, not peer observation. close cannot retract existing DHT values.
 // OpenDHT gives each put a new value ID and may retain expired records. A hard
-// publication count includes retries. In experimental windowed mode the limit
-// applies per key window; watchers must separately support the same windows.
+// publication count includes retries and applies per 120-second discovery
+// window in both modes; in windowed mode the key also rotates with the window
+// and watchers must separately support the same windows.
 // Outbox errors can be reported inline from tick or retry and are retryable;
 // AdvertisementLeaseFailure values are terminal and require closing the lease.
 class NativeAdvertisementLease {

@@ -35,10 +35,10 @@ struct DiscoveryCycleCallbacks {
 // the timer before both children. Publication limits remain terminal: this does not replace
 // exhausted leases. A failed catch-up closes the cycle and reports incomplete discovery; it does
 // not mean the underlying listener itself failed. Retryable publication errors are retried no
-// faster than retry_after_pulses scheduled pulses. A timer submission allocation failure cannot
-// deliver a callback; the owner must poll is_open() or enforce a deadline to observe that
-// exceptional case. is_open()==false does not close submission gates; call close() and drain
-// admitted work before releasing the executor.
+// faster than retry_after_pulses scheduled pulses, doubling per consecutive failure up to 32x. A
+// timer submission allocation failure cannot deliver a callback; the owner must poll is_open() or
+// enforce a deadline to observe that exceptional case. is_open()==false does not close submission
+// gates; call close() and drain admitted work before releasing the executor.
 class NativeDiscoveryCycle {
   public:
     static std::variant<std::unique_ptr<NativeDiscoveryCycle>, StoreError, CryptoError>

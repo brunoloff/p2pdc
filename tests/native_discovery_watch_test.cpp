@@ -1,5 +1,7 @@
 #include "native_discovery_watch_fixture.hpp"
 
+#include <algorithm>
+
 TEST_F(NativeDiscoveryWatchTest, RetainsCredentialsAfterCallerReleasesThem) {
     std::weak_ptr<Identity> identity_lifetime = identity;
     std::weak_ptr<Bytes> capability_lifetime = capability;
@@ -260,7 +262,7 @@ TEST_F(NativeDiscoveryWatchTest, LeaseRefreshesAndExpiresAfterClose) {
     EXPECT_EQ(expired.front().fields.sequence, 8U);
 }
 
-TEST(NativeAdvertisementLeaseValidation, BoundsRetriesAndRejectsExpiredPendingRecord) {
+TEST(NativeAdvertisementLeaseValidation, BoundsRetriesAndReplacesExpiredPendingRecord) {
     auto runner = std::make_shared<dht::DhtRunner>();
     NativeStore store(runner, {1024, 32, 32768});
     auto identity = std::make_shared<Identity>(
@@ -299,11 +301,15 @@ TEST(NativeAdvertisementLeaseValidation, BoundsRetriesAndRejectsExpiredPendingRe
     EXPECT_EQ(lease2->tick(), AdvertisementLeaseTick::Submitted);
     time = 120;
     EXPECT_FALSE(lease2->retry());
-    EXPECT_EQ(std::get<AdvertisementLeaseFailure>(errors.back()),
-              AdvertisementLeaseFailure::ExpiredPending);
+    EXPECT_TRUE(lease2->is_open());
+    EXPECT_TRUE(std::none_of(errors.begin(), errors.end(), [](const auto &error) {
+        return std::holds_alternative<AdvertisementLeaseFailure>(error);
+    }));
+    EXPECT_EQ(lease2->tick(), AdvertisementLeaseTick::Submitted);
+    EXPECT_TRUE(lease2->is_open());
 }
 
-TEST_F(NativeDiscoveryWatchTest, LeaseRejectsPublicationCompletionAfterExpiry) {
+TEST_F(NativeDiscoveryWatchTest, LeaseRepublishesWhenCompletionArrivesAfterExpiry) {
     int published = 0;
     std::vector<AdvertisementLeaseError> lease_errors;
     auto created = NativeAdvertisementLease::create(
@@ -314,11 +320,36 @@ TEST_F(NativeDiscoveryWatchTest, LeaseRejectsPublicationCompletionAfterExpiry) {
     auto lease = std::move(std::get<std::unique_ptr<NativeAdvertisementLease>>(created));
     ASSERT_EQ(lease->tick(), AdvertisementLeaseTick::Submitted);
     time = 120;
-    ASSERT_TRUE(loop.until([&] { return !lease_errors.empty(); }));
-    EXPECT_EQ(std::get<AdvertisementLeaseFailure>(lease_errors.front()),
-              AdvertisementLeaseFailure::ExpiredPending);
-    EXPECT_EQ(published, 0);
-    EXPECT_FALSE(lease->is_open());
+    ASSERT_TRUE(loop.until([&] { return lease->tick() == AdvertisementLeaseTick::Submitted; }));
+    ASSERT_TRUE(loop.until([&] { return published == 1; }));
+    EXPECT_TRUE(lease_errors.empty());
+    EXPECT_TRUE(lease->is_open());
+    ASSERT_TRUE(lease->published_fields());
+    EXPECT_EQ(lease->published_fields()->sequence, 1U);
+    EXPECT_EQ(lease->published_fields()->issued_at, 120U);
+}
+
+TEST_F(NativeDiscoveryWatchTest, FixedKeyLeasePublicationBudgetResetsEachWindow) {
+    int published = 0;
+    std::vector<AdvertisementLeaseError> lease_errors;
+    auto created = NativeAdvertisementLease::create(
+        NativeStore(first, {1024, 32, 32768}), identity, capability, lease_config(0, 2),
+        MemoryBudget(4096), loop.executor(), [this] { return time; },
+        {[&](std::uint64_t) { ++published; },
+         [&](AdvertisementLeaseError error) { lease_errors.push_back(error); }});
+    auto lease = std::move(std::get<std::unique_ptr<NativeAdvertisementLease>>(created));
+    for (const std::uint64_t at : {100U, 110U, 121U, 131U}) {
+        time = at;
+        ASSERT_EQ(lease->tick(), AdvertisementLeaseTick::Submitted) << at;
+        const auto expected = published + 1;
+        ASSERT_TRUE(loop.until([&] { return published == expected; })) << at;
+    }
+    EXPECT_TRUE(lease_errors.empty());
+    time = 141;
+    EXPECT_EQ(lease->tick(), AdvertisementLeaseTick::Failed);
+    ASSERT_FALSE(lease_errors.empty());
+    EXPECT_EQ(std::get<AdvertisementLeaseFailure>(lease_errors.back()),
+              AdvertisementLeaseFailure::PublicationLimit);
 }
 
 TEST_F(NativeDiscoveryWatchTest, LeaseDoesNotWrapSequenceNumbers) {

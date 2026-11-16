@@ -335,8 +335,10 @@ certificate, credential, relay, and socket regression checks.
 
 An internal native discovery watcher and caller-driven announcement lease also
 work against isolated OpenDHT nodes. Each put uses a fresh DHT value ID. The
-default rotating protocol moves announcements to time-windowed keys and bounds
-attempts per window; the legacy fixed-key protocol bounds attempts per lease.
+default rotating protocol moves announcements to time-windowed keys; both
+protocols bound publication attempts per 120-second window. Failed puts are
+retried with exponential backoff, and a record that expires before it is
+published is replaced by a fresh one, so outages do not end a lease.
 Application-level expiry alone does not prevent old values from consuming DHT
 lookup limits.
 Native and browser discovery catch-up collapse byte-identical retries across

@@ -1,6 +1,8 @@
 #include "native_discovery_cycle.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -10,6 +12,7 @@ struct NativeDiscoveryCycle::State : std::enable_shared_from_this<State> {
     std::chrono::milliseconds period;
     std::size_t retry_delay;
     std::size_t retry_remaining = 0;
+    unsigned retry_failures = 0;
     DiscoveryCycleCallbacks callbacks;
     std::unique_ptr<NativeDiscoveryWatch> watch;
     std::unique_ptr<NativeAdvertisementLease> lease;
@@ -158,13 +161,24 @@ DiscoveryWatchCallbacks NativeDiscoveryCycle::State::watch_handlers() {
     return result;
 }
 
+// Consecutive failed publications back off exponentially (retry_delay pulses,
+// doubling up to 32 times that) so an outage does not burn the publication
+// budget at the pulse rate; a successful publication resets the backoff.
 AdvertisementLeaseCallbacks NativeDiscoveryCycle::State::lease_handlers() {
     auto result = callbacks.lease;
+    result.on_published = [weak = weak_from_this()](std::uint64_t sequence) {
+        if (auto self = weak.lock(); self && self->active) {
+            self->retry_failures = 0;
+            self->callbacks.lease.on_published(sequence);
+        }
+    };
     result.on_error = [weak = weak_from_this()](AdvertisementLeaseError error) {
         if (auto self = weak.lock(); self && self->active) {
             if (std::holds_alternative<OutboxError>(error)) {
                 self->retry_pending = true;
-                self->retry_remaining = self->retry_delay;
+                const auto limit = std::numeric_limits<std::size_t>::max() >> 5;
+                self->retry_remaining = std::min(self->retry_delay, limit) << self->retry_failures;
+                self->retry_failures = std::min(self->retry_failures + 1, 5U);
             }
             self->callbacks.lease.on_error(std::move(error));
         }

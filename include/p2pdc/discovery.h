@@ -110,7 +110,7 @@ struct AnnounceOptions {
     std::chrono::milliseconds pulse_interval{1000};
     std::uint64_t lifetime_seconds = 120;
     std::uint64_t refresh_seconds = 60;
-    std::size_t max_publications = 32;   // 1 through 32 per lease or window, including retries.
+    std::size_t max_publications = 32;   // 1 through 32 per 120 s window, including retries.
     std::size_t max_pending_events = 32; // 1 through 256.
     DiscoveryProtocol protocol = DiscoveryProtocol::RotatingKeysV2;
 };
@@ -126,7 +126,9 @@ struct AnnounceHandlers {
 // close or destruction suppresses queued events; an event already executing may
 // finish. A lease advertises an ephemeral endpoint instance. Dropping it stops refresh
 // but cannot retract already published records. The publication limit includes
-// retries; it applies per window for RotatingKeysV2 and per lease for FixedKeyV1.
+// retries; it applies per 120-second window in both protocols. Failed puts are
+// retried with exponential backoff, and an unpublished record that expires is
+// replaced by a fresh one instead of ending the lease.
 class Lease {
   public:
     ~Lease();

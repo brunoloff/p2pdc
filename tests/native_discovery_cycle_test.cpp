@@ -248,6 +248,34 @@ TEST_F(NativeDiscoveryCycleTest, RetriesOnlyAfterConfiguredPulseDelay) {
     cycle->close();
 }
 
+TEST_F(NativeDiscoveryCycleTest, RetryDelayDoublesAfterConsecutiveFailures) {
+    auto options = config();
+    options.lease_config->max_publications = 8;
+    auto result =
+        NativeDiscoveryCycle::create(options, loop.executor(), scheduler.scheduler(), handlers());
+    auto cycle = std::move(std::get<std::unique_ptr<NativeDiscoveryCycle>>(result));
+    ASSERT_TRUE(cycle->start());
+    ASSERT_TRUE(advance_until([&] { return caught_up && *caught_up && published == 1; }));
+    first->join();
+    time = 110;
+    ASSERT_TRUE(advance_until([&] { return lease_errors.size() == 1; }));
+    const auto pulses_until_next_error = [&] {
+        const auto before = lease_errors.size();
+        unsigned pulses = 0;
+        while (lease_errors.size() == before && pulses < 64) {
+            if (!pulse_once(*cycle))
+                return 0U;
+            ++pulses;
+        }
+        return pulses;
+    };
+    EXPECT_EQ(pulses_until_next_error(), 2U);
+    EXPECT_EQ(pulses_until_next_error(), 4U);
+    EXPECT_EQ(pulses_until_next_error(), 8U);
+    EXPECT_TRUE(cycle_errors.empty());
+    cycle->close();
+}
+
 TEST_F(NativeDiscoveryCycleTest, RejectsInvalidRuntimeBeforeStarting) {
     auto invalid = config();
     invalid.period = 0ms;

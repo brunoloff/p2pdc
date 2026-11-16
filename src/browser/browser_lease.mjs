@@ -5,6 +5,9 @@ import { timing } from "./discovery_clock.mjs";
 // Bounded announcement lease. Each successful publication announces an
 // ephemeral endpoint for 120 seconds; refresh occurs after 60 seconds.
 // A publication being accepted by the proxy does not imply peer observation.
+// The publication budget (retries included) applies per 120-second window;
+// retries back off exponentially, and a record that expires unpublished is
+// replaced by a fresh one rather than ending the lease.
 // Start only after the owner is prepared to receive on the endpoint inbox.
 export class BrowserLease {
     constructor(module, proxy, identity, handlers, options = {}) {
@@ -21,7 +24,8 @@ export class BrowserLease {
         ({ timers: this.timers, clock: this.clock } = timing(options));
         this.closed = false; this.failed = false; this.started = false; this.pending = false;
         this.timerGeneration = 0;
-        this.timer = null; this.attempts = 0; this.expires = 0; this.refreshAt = 0; this.publishedExpiry = 0;
+        this.timer = null; this.attempts = 0; this.failures = 0; this.budgetWindow = null;
+        this.expires = 0; this.refreshAt = 0; this.publishedExpiry = 0;
         this.proxy = proxy; this.window = null; this.outbox = null;
         this.discovery = new WasmDiscovery(module, identity, { onPeer: () => {}, onError: () => this.fail("discovery") });
         try {
@@ -33,15 +37,27 @@ export class BrowserLease {
         return new ProxyOutbox(this.proxy, key, { onPublished: () => this.completed(), onError: () => this.retryLater() },
             { maxQueuedRecords: 1, maxQueuedBytes: 32768, maxRecordBytes: 32768 });
     }
-    prepareWindow(now) {
-        if (!this.windowed) return true;
+    resetBudget(now) {
         const window = Math.floor(now / 120);
-        if (window === this.window) return true;
+        if (window !== this.budgetWindow) { this.budgetWindow = window; this.attempts = 0; }
+    }
+    prepareWindow(now) {
+        this.resetBudget(now);
+        const window = Math.floor(now / 120);
+        if (!this.windowed || window === this.window) return true;
         try {
             const outbox = this.makeOutbox(this.discovery.windowKey(now));
-            this.outbox?.close(); this.outbox = outbox; this.window = window; this.attempts = 0;
+            this.outbox?.close(); this.outbox = outbox; this.window = window;
             return true;
         } catch { this.fail("discovery"); return false; }
+    }
+    // Discards an unpublished expired record with its outbox and publishes anew.
+    replaceExpired(now) {
+        try {
+            const outbox = this.makeOutbox(this.windowed ? this.discovery.windowKey(now) : this.discovery.key());
+            this.outbox.close(); this.outbox = outbox;
+        } catch { this.fail("discovery"); return; }
+        this.clearTimer(); this.pending = false; this.publish();
     }
     start() {
         if (this.started || this.closed || this.failed) throw new Error("lease cannot be started");
@@ -69,24 +85,27 @@ export class BrowserLease {
         let now;
         try { now = this.clock.read(); }
         catch { this.fail("clock"); return; }
-        if (!this.pending || now >= this.expires) { this.fail("expiredPending"); return; }
+        if (!this.pending) return;
+        if (now >= this.expires) { this.replaceExpired(now); return; }
         this.clearTimer();
-        this.pending = false; this.publishedExpiry = this.expires;
+        this.pending = false; this.publishedExpiry = this.expires; this.failures = 0;
         try { this.handlers.onPublished(); }
         catch { this.fail("callback"); return; }
         if (!this.closed && !this.failed) this.schedule(Math.max(0, (this.refreshAt - now) * 1000), "refresh");
     }
     retryLater() {
         if (this.closed || this.failed) return;
-        if (this.attempts >= this.maxPublications) { this.fail("publicationLimit"); return; }
         let now;
         try { now = this.clock.read(); }
         catch { this.fail("clock"); return; }
-        if (!this.pending || now >= this.expires) { this.fail("expiredPending"); return; }
+        if (!this.pending) return;
+        if (now >= this.expires) { this.replaceExpired(now); return; }
         this.clearTimer();
         try { this.handlers.onError("retrying"); }
         catch { this.fail("callback"); return; }
-        if (!this.closed && !this.failed) this.schedule(Math.min(this.retryMs, (this.expires - now) * 1000), "retry");
+        const delay = Math.min(this.retryMs * 2 ** Math.min(this.failures, 5), 60000);
+        this.failures = Math.min(this.failures + 1, 5);
+        if (!this.closed && !this.failed) this.schedule(Math.min(delay, (this.expires - now) * 1000), "retry");
     }
     schedule(delay, action) {
         if (this.closed || this.failed || this.timer !== null) return;
@@ -111,8 +130,10 @@ export class BrowserLease {
             else this.publish();
             return;
         }
-        if (!this.pending || now >= this.expires) { this.fail("expiredPending"); return; }
+        if (!this.pending) return;
+        if (now >= this.expires) { this.replaceExpired(now); return; }
         if (action === "expire") { this.schedule((this.expires - now) * 1000, "expire"); return; }
+        this.resetBudget(now);
         if (this.attempts >= this.maxPublications) { this.fail("publicationLimit"); return; }
         ++this.attempts;
         if (!this.outbox.retry()) { this.fail("backend"); return; }

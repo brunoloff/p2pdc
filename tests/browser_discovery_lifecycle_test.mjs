@@ -156,15 +156,19 @@ test("windowed lease reports a missing key bridge and rejects invalid mode", asy
     assert.deepEqual(f.errors, ["discovery"]); assert.equal(f.writes.length, 0); lease.close();
 });
 
-test("lease expires pending publication and honors publication limit", async () => {
+test("lease replaces an expired pending publication and honors publication limit", async () => {
     const f = fixture();
-    const lease = new BrowserLease(f.module, f.proxy, f.options, { onPublished: () => {},
+    const lease = new BrowserLease(f.module, f.proxy, f.options, { onPublished: () => f.events.push("published"),
         onError: (error) => f.errors.push(error) }, f.clockOptions);
     assert.equal(lease.start(), true); await settle();
     f.setNow(1120); f.fire(); await settle();
-    assert.deepEqual(f.errors, ["expiredPending"]);
+    assert.deepEqual(f.errors, []);
+    assert.equal(f.writes.length, 2);
     f.writes[0].resolve(); await settle();
-    assert.equal(lease.healthy(), false); lease.close();
+    assert.deepEqual(f.events, []);
+    f.writes[1].resolve(); await settle();
+    assert.deepEqual(f.events, ["published"]);
+    assert.equal(lease.healthy(), true); lease.close();
     const g = fixture();
     const limited = new BrowserLease(g.module, g.proxy, g.options, { onPublished: () => {},
         onError: (error) => g.errors.push(error) }, { ...g.clockOptions, maxPublications: 1 });
@@ -189,7 +193,7 @@ test("lease absorbs small clock regressions, fails on large ones, and close supp
     assert.deepEqual(g.events, []); assert.deepEqual(g.errors, []);
 });
 
-test("a stalled retry cannot outlive the pending advertisement", async () => {
+test("a stalled retry is replaced by a fresh record once the pending one expires", async () => {
     const f = fixture();
     const lease = new BrowserLease(f.module, f.proxy, f.options, { onPublished: () => {},
         onError: (error) => f.errors.push(error) }, f.clockOptions);
@@ -199,8 +203,25 @@ test("a stalled retry cannot outlive the pending advertisement", async () => {
     f.setNow(1002); f.fire(); await settle();
     assert.equal(f.writes.length, 2);
     f.setNow(1120); f.fire(); await settle();
-    assert.deepEqual(f.errors, ["retrying", "expiredPending"]);
-    assert.equal(lease.healthy(), false); lease.close();
+    assert.equal(f.writes.length, 3);
+    assert.notDeepEqual(f.writes[2].data, f.writes[0].data);
+    assert.deepEqual(f.errors, ["retrying"]);
+    assert.equal(lease.healthy(), true); lease.close();
+});
+
+test("consecutive publication failures back off exponentially", async () => {
+    const f = fixture();
+    const lease = new BrowserLease(f.module, f.proxy, f.options, { onPublished: () => {},
+        onError: (error) => f.errors.push(error) }, f.clockOptions);
+    assert.equal(lease.start(), true); await settle();
+    const delays = [];
+    for (let index = 0; index < 3; ++index) {
+        f.writes.at(-1).reject(new Error("offline")); await settle();
+        delays.push([...f.timers.values()].at(-1).delay);
+        f.fire(); await settle();
+    }
+    assert.deepEqual(delays, [2000, 4000, 8000]);
+    lease.close();
 });
 
 test("watch sweeps while initial lookup remains pending and rejects bad handles", async () => {
