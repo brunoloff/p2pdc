@@ -34,8 +34,9 @@ struct DiscoveryWatchLimits {
 // In experimental windowed mode, tick also registers and catches up rotating
 // keys automatically; registration() is invalid and catch_up() is unavailable.
 // on_catchup runs once for each current window range after its lookups finish.
-// Capacity exhaustion or local clock/crypto failure makes the watcher unhealthy;
-// the owner closes it and reports incomplete discovery. DHT is best effort.
+// A full tracker ignores new peers (logged once) and stays healthy. Local
+// clock/crypto failure makes the watcher unhealthy; the owner closes it and
+// reports incomplete discovery. DHT is best effort.
 // The supplied budget covers mailbox payloads; max_entries separately bounds
 // tracker entries and expiry-event allocations, not OpenDHT or allocator overhead.
 class NativeDiscoveryWatch {

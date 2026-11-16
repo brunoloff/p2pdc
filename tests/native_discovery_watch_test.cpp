@@ -114,7 +114,7 @@ TEST(NativeDiscoveryWatchValidation, RejectsMissingCallbacksAndInvalidCapability
                  std::invalid_argument);
 }
 
-TEST_F(NativeDiscoveryWatchTest, ReportsCapacityExhaustionWithoutEvictingExistingPeer) {
+TEST_F(NativeDiscoveryWatchTest, IgnoresNewPeersAtCapacityWithoutEvictingOrFailing) {
     auto result = NativeDiscoveryWatch::create(
         NativeStore(second, {1024, 32, 32768}), capability, {{4096, 16, 1024}, 1, 60, 5},
         MemoryBudget(4096), loop.executor(), [this] { return time; }, callbacks());
@@ -134,11 +134,12 @@ TEST_F(NativeDiscoveryWatchTest, ReportsCapacityExhaustionWithoutEvictingExistin
                                150};
     auto wire = std::get<Bytes>(encode_advertisement(other, fields, *capability, {100, 60, 5}));
     ASSERT_TRUE(publish(wire));
-    ASSERT_TRUE(loop.until([&] { return !errors.empty(); }));
-    EXPECT_EQ(errors.front(), DiscoveryWatchError::ResourceLimit);
+    const auto deadline = std::chrono::steady_clock::now() + 300ms;
+    ASSERT_TRUE(loop.until([&] { return std::chrono::steady_clock::now() >= deadline; }));
+    EXPECT_TRUE(errors.empty());
     EXPECT_EQ(events.size(), 1U);
-    EXPECT_FALSE(watch->is_open());
-    EXPECT_FALSE(watch->tick());
+    EXPECT_TRUE(watch->is_open());
+    EXPECT_TRUE(watch->tick());
 }
 
 TEST_F(NativeDiscoveryWatchTest, CurrentPeerFailsClosedWhenClockRegresses) {

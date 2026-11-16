@@ -119,8 +119,9 @@ void NativeIncomingListener::State::handle_result(IncomingOfferResult result) {
             fail(IncomingListenerError::Callback);
         }
     } else if (auto *error = std::get_if<IncomingOfferError>(&result)) {
-        if (*error == IncomingOfferError::Full)
-            fail(IncomingListenerError::ResourceLimit);
+        // Full: the replay history is at capacity. The offer is dropped; the
+        // listener stays open, and replay entries are never evicted early, so
+        // replay protection is unchanged. Capacity returns as entries expire.
         if (*error == IncomingOfferError::ClockRegressed)
             fail(IncomingListenerError::Clock);
         if (*error == IncomingOfferError::ContextMismatch)
@@ -164,21 +165,24 @@ void NativeIncomingListener::State::receive(Bytes wire) {
     }
 }
 
+// Offers from not-yet-seen peers are untrusted surplus: when the table is full
+// the oldest entry is evicted, and a record the budget cannot hold is dropped.
 void NativeIncomingListener::State::retain(Bytes wire, std::uint64_t time) {
     prune_pending(time);
     if (std::any_of(pending.begin(), pending.end(),
                     [&](const auto &item) { return item.wire == wire; }))
         return;
     const auto size = wire.capacity();
-    if (pending.size() >= pending_limit || size > pending_bytes_limit - pending_bytes) {
-        fail(IncomingListenerError::ResourceLimit);
+    if (size > pending_bytes_limit)
         return;
+    while (!pending.empty() &&
+           (pending.size() >= pending_limit || size > pending_bytes_limit - pending_bytes)) {
+        pending_bytes -= pending.front().reservation.bytes();
+        pending.pop_front();
     }
     auto reservation = budget.try_reserve(size);
-    if (!reservation) {
-        fail(IncomingListenerError::ResourceLimit);
+    if (!reservation)
         return;
-    }
     pending.push_back({std::move(wire), std::move(*reservation), time});
     pending_bytes += size;
 }

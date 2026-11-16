@@ -214,7 +214,7 @@ TEST_F(NativeIncomingListenerTest, RetriesUnknownPeerWhenDiscoveryCatchesUp) {
     EXPECT_EQ(watch->pending_offers(), 0U);
     EXPECT_EQ(budget.used(), 0U);
 }
-TEST_F(NativeIncomingListenerTest, UnknownPeerQueueIsBounded) {
+TEST_F(NativeIncomingListenerTest, UnknownPeerQueueEvictsOldestWhenFull) {
     Peer sender(std::byte{1}), receiver(std::byte{2});
     auto context = make_context(receiver, verified_advertisement(sender));
     context.remote.peers.clear();
@@ -227,10 +227,19 @@ TEST_F(NativeIncomingListenerTest, UnknownPeerQueueIsBounded) {
         ASSERT_TRUE(
             publish(receiver, signed_seed(sender, receiver, SignalingKind::Offer, attempt)));
     }
-    ASSERT_TRUE(loop.until([&] { return !watch->poll(); }));
-    ASSERT_EQ(errors.size(), 1U);
-    EXPECT_EQ(errors.front(), IncomingListenerError::ResourceLimit);
+    ASSERT_TRUE(loop.until([&] { return !watch->poll() || watch->pending_offers() == 16; }));
+    const auto deadline = std::chrono::steady_clock::now() + 200ms;
+    ASSERT_TRUE(loop.until([&] {
+        (void)watch->poll();
+        return std::chrono::steady_clock::now() >= deadline;
+    }));
+    EXPECT_TRUE(errors.empty());
+    EXPECT_EQ(watch->pending_offers(), 16U);
     EXPECT_TRUE(offers.empty());
+    context.remote.peers.push_back(verified_advertisement(sender));
+    ASSERT_TRUE(loop.until([&] { return !watch->poll() || offers.size() == 16; }));
+    EXPECT_TRUE(errors.empty());
+    EXPECT_EQ(offers.size(), 16U);
     watch->close();
     EXPECT_EQ(budget.used(), 0U);
 }
@@ -306,6 +315,28 @@ TEST_F(NativeIncomingListenerTest, ChangedCapabilityStopsTheListener) {
     EXPECT_FALSE(watch->poll());
     ASSERT_EQ(errors.size(), 1U);
     EXPECT_EQ(errors.front(), IncomingListenerError::Context);
+}
+
+TEST_F(NativeIncomingListenerTest, FullReplayHistoryDropsOffersWithoutFailing) {
+    Peer sender(std::byte{1}), receiver(std::byte{2});
+    auto context = make_context(receiver, verified_advertisement(sender));
+    auto watch = listener(context);
+    ASSERT_TRUE(watch);
+    for (unsigned index = 1; index <= 33; ++index) {
+        AttemptId attempt{};
+        attempt[0] = static_cast<std::byte>(index);
+        ASSERT_TRUE(
+            publish(receiver, signed_seed(sender, receiver, SignalingKind::Offer, attempt)));
+    }
+    ASSERT_TRUE(loop.until([&] { return !watch->poll() || offers.size() == 32; }));
+    const auto deadline = std::chrono::steady_clock::now() + 200ms;
+    ASSERT_TRUE(loop.until([&] {
+        (void)watch->poll();
+        return std::chrono::steady_clock::now() >= deadline;
+    }));
+    EXPECT_TRUE(errors.empty());
+    EXPECT_EQ(offers.size(), 32U);
+    EXPECT_TRUE(watch->poll());
 }
 
 TEST_F(NativeIncomingListenerTest, ReplacedIdentityStopsTheListener) {

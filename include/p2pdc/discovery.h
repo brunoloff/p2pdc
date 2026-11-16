@@ -34,7 +34,9 @@ enum class DiscoveryProtocol : std::uint8_t { FixedKeyV1, RotatingKeysV2 };
 
 struct WatchOptions {
     // Tracker capacity; lookup and delivery limits are separate and may make
-    // discovery incomplete before this many distinct peers are observed.
+    // discovery incomplete before this many distinct peers are observed. When
+    // full, new peers are ignored until tracked advertisements expire; the
+    // subscription stays healthy.
     std::size_t max_peers = 128;
     std::size_t max_pending_events = 128;
     std::chrono::milliseconds pulse_interval{500};

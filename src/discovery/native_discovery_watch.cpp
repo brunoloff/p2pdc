@@ -1,6 +1,7 @@
 #include "native_discovery_watch.hpp"
 #include "native_windowed_mailbox.hpp"
 
+#include <iostream>
 #include <stdexcept>
 #include <utility>
 
@@ -18,6 +19,7 @@ struct NativeDiscoveryWatch::State : std::enable_shared_from_this<State> {
     bool active = true;
     bool healthy = true;
     bool unavailable = false;
+    bool saturation_reported = false;
     State(std::shared_ptr<const Bytes> secret, DiscoveryWatchLimits bounds,
           std::function<std::uint64_t()> clock, DiscoveryWatchCallbacks handlers)
         : capability(std::move(secret)), limits(bounds),
@@ -26,6 +28,7 @@ struct NativeDiscoveryWatch::State : std::enable_shared_from_this<State> {
     void fail(DiscoveryWatchError error, std::optional<StoreError> detail = std::nullopt);
     [[nodiscard]] bool sweep(std::uint64_t time);
     void receive(Bytes wire);
+    void report_saturation();
     [[nodiscard]] MailboxCallbacks handlers();
     [[nodiscard]] RecoveryCallbacks recovery_handlers();
     [[nodiscard]] WindowedMailboxCallbacks windowed_handlers();
@@ -37,6 +40,17 @@ void NativeDiscoveryWatch::State::fail(DiscoveryWatchError error,
         healthy = false;
         callbacks.on_error(error, detail);
     }
+}
+
+// A full tracker drops new peers instead of ending discovery, so a group member
+// minting identities cannot stop the watch. Known peers stay tracked and
+// capacity returns as entries expire.
+void NativeDiscoveryWatch::State::report_saturation() {
+    if (saturation_reported)
+        return;
+    saturation_reported = true;
+    std::cerr << "p2pdc: discovery peer limit reached; new peers are ignored until tracked "
+                 "advertisements expire (WatchOptions::max_peers)\n";
 }
 
 RecoveryCallbacks NativeDiscoveryWatch::State::recovery_handlers() {
@@ -92,7 +106,7 @@ void NativeDiscoveryWatch::State::receive(Bytes wire) {
             if (event == AdvertisementEvent::Seen || event == AdvertisementEvent::Updated)
                 callbacks.on_peer(std::move(*value), event);
             else if (event == AdvertisementEvent::Full)
-                fail(DiscoveryWatchError::ResourceLimit);
+                report_saturation();
             else if (event == AdvertisementEvent::ClockRegressed)
                 fail(DiscoveryWatchError::ClockRegressed);
         } else if (auto *error = std::get_if<CryptoError>(&decoded);

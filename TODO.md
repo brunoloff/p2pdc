@@ -72,9 +72,8 @@ without requiring a fixed coordinator or prescribing a connection topology.
 
 ### Other post-alpha work
 
-- [ ] Improve behavior when the per-lease replay cache fills: currently its
-  32 recent-offer bound fails the listener and discards pending requests. Make
-  sustained joining more resilient without weakening replay protection.
+- [x] Improve behavior when the per-lease replay cache fills: new offers are
+  now dropped while the listener stays open, without evicting replay entries.
 - [ ] Validate Safari and mobile browsers, which are outside the first alpha's
   supported browser target.
 - [ ] Finish Android support: run the documented build from a fresh checkout and

@@ -73,16 +73,17 @@ TEST_F(NativePublicCapacityTest, CatchesUpMoreThanSixtyFourPeers) {
     subscription->close();
 }
 
-TEST_F(NativePublicCapacityTest, PeerCapacityExhaustionReportsIncompleteDiscovery) {
+TEST_F(NativePublicCapacityTest, PeerCapacityExhaustionIgnoresNewPeersAndStaysHealthy) {
     set_current_time();
     for (unsigned i = 1; i <= 3; ++i)
         ASSERT_TRUE(publish_peer(i));
     WatchOptions options;
     options.max_peers = 2;
     auto subscription = watch(options);
-    ASSERT_TRUE(advance_until([&] { return !failures.empty(); }));
-    EXPECT_EQ(failures.front(), WatchError::ResourceLimit);
-    EXPECT_FALSE(subscription->healthy());
+    ASSERT_TRUE(advance_until([&] { return peers.size() >= 2 && caught.has_value(); }));
+    EXPECT_TRUE(failures.empty());
+    EXPECT_EQ(peers.size(), 2U);
+    EXPECT_TRUE(subscription->healthy());
     subscription->close();
 }
 

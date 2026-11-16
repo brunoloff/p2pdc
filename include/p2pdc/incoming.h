@@ -54,8 +54,11 @@ struct IncomingHandlers {
 // state() because scheduler submission failure may prevent an error callback.
 // Persistent mode stays Listening while requests are pending. At capacity it
 // rejects new offers best-effort and can report a coalesced on_overflow event.
-// Separate bounded resources, including replay history, can fail the listener
-// with ResourceLimit and discard pending requests without notifying peers.
+// When the per-lease replay history (32 recent offers) or the table of offers
+// from not-yet-discovered peers is full, new offers are dropped and the
+// listener stays open; replay entries are never evicted early. Local failures
+// such as allocation can still fail the listener with ResourceLimit and discard
+// pending requests without notifying peers.
 // Close rejects every pending request and suppresses undelivered callbacks.
 class IncomingListener {
   public:

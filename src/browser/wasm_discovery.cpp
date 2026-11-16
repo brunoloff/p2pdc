@@ -208,7 +208,8 @@ int WasmDiscovery::receive(ByteView wire, std::uint64_t now) {
         const auto event = tracker_.observe(*value, now);
         if (event == AdvertisementEvent::Seen || event == AdvertisementEvent::Updated)
             return install(*value, event) ? 0 : 2;
-        if (event == AdvertisementEvent::Full || event == AdvertisementEvent::ClockRegressed) {
+        // A full tracker ignores new peers rather than ending discovery.
+        if (event == AdvertisementEvent::ClockRegressed) {
             healthy_ = false;
             return 2;
         }
@@ -270,7 +271,8 @@ int WasmDiscovery::incoming(WasmDiscovery &watch, ByteView wire, std::uint64_t n
             return 3;
         if (*error == IncomingOfferError::NotOffer)
             return 4;
-        return *error == IncomingOfferError::Full || *error == IncomingOfferError::ClockRegressed ||
+        // Full drops the offer without evicting replay history.
+        return *error == IncomingOfferError::ClockRegressed ||
                        *error == IncomingOfferError::ContextMismatch
                    ? 2
                    : 0;

@@ -154,11 +154,14 @@ the owner executor, and IDs are local to the listener.
 
 The pending limit is an upper bound, not a reservation. A separate replay cache
 holds at most 32 recent offers per lease, including offers already accepted or
-rejected. If it fills before entries expire, the listener fails with
-`IncomingError::ResourceLimit`; its remaining requests are discarded and their
-peers may time out. Reopening the listener does not clear this cache. Other
-backend resource limits can also fail the listener. Applications should handle
-listener failure and retry when appropriate.
+rejected. If it fills before entries expire, new offers are dropped (their
+peers may time out) and the listener stays open; entries are never evicted
+early, so replay protection is unchanged and capacity returns as entries
+expire. Reopening the listener does not clear this cache. Offers from peers
+whose advertisements have not been seen yet are held in a table of 16 that
+evicts the oldest entry when full. Local failures such as allocation can still
+fail the listener. Applications should handle listener failure and retry when
+appropriate.
 
 The echo example waits for both publication and watch catch-up before starting
 its connection, and retains a matching advertisement until it can dial. Its

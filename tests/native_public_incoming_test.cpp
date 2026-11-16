@@ -154,7 +154,7 @@ TEST_F(NativePublicIncomingTest, ClosingPendingRequestNotifiesDialingPeer) {
     EXPECT_EQ(sending->state(), ConnectionState::Failed);
 }
 
-TEST_F(NativePublicIncomingTest, UnknownOfferOverflowReportsResourceLimit) {
+TEST_F(NativePublicIncomingTest, UnknownOfferOverflowDoesNotFailTheListener) {
     setup_sides();
     listen();
     Peer external(std::byte{9});
@@ -176,10 +176,11 @@ TEST_F(NativePublicIncomingTest, UnknownOfferOverflowReportsResourceLimit) {
         ASSERT_TRUE(std::holds_alternative<Bytes>(wire));
         ASSERT_TRUE(put(target.fields.signaling_inbox, std::get<Bytes>(wire)));
     }
-    ASSERT_TRUE(advance([&] { return !incoming_errors.empty(); }));
-    ASSERT_EQ(incoming_errors.size(), 1U);
-    EXPECT_EQ(incoming_errors.front(), IncomingError::ResourceLimit);
+    const auto deadline = std::chrono::steady_clock::now() + 500ms;
+    ASSERT_TRUE(advance([&] { return std::chrono::steady_clock::now() >= deadline; }));
+    EXPECT_TRUE(incoming_errors.empty());
     EXPECT_FALSE(request);
+    EXPECT_EQ(incoming->state(), IncomingState::Listening);
 }
 
 TEST_F(NativePublicIncomingTest, ClosingDialNotifiesPendingListener) {
