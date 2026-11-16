@@ -221,3 +221,40 @@ test("aborted requests and callback failures are propagated", async () => {
     await assert.rejects(streaming.listen(key, () => { throw new Error("handler failed"); }).done,
                          /handler failed/);
 });
+
+test("listen skips blank keep-alive lines", async () => {
+    const values = [];
+    const client = proxy(async () => response([`\n\r\n${record("AQ==")}\n\n`]));
+    await assert.rejects(client.listen(key, (value) => values.push([...value.bytes])).done,
+                         (error) => error.code === "stream_closed");
+    assert.deepEqual(values, [[1]]);
+});
+
+test("listen drops records beyond the per-second rate", async () => {
+    const values = [];
+    const lines = Array.from({ length: 5 }, (_, index) => record(btoa(String.fromCharCode(index)), String(index + 1)));
+    const client = proxy(async () => response([`${lines.join("\n")}\n`]), { maxRecordsPerSecond: 2 });
+    await assert.rejects(client.listen(key, (value) => values.push(value.bytes[0])).done,
+                         (error) => error.code === "stream_closed");
+    assert.deepEqual(values, [0, 1]);
+});
+
+test("an idle listen stream is restarted transparently and close still ends it", async () => {
+    let requests = 0;
+    const open = (signal) => ({ ok: true, status: 200, body: new ReadableStream({
+        start(controller) {
+            if (requests === 2) controller.enqueue(encoder.encode(`${record("Ag==")}\n`));
+            signal.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+        },
+    }) });
+    const client = proxy(async (_url, init) => { ++requests; return open(init.signal); }, { listenIdleMs: 20 });
+    const values = [];
+    const subscription = client.listen(key, (value) => values.push([...value.bytes]));
+    assert.equal(await subscription.ready, true);
+    while (values.length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(requests >= 2);
+    assert.deepEqual(values, [[2]]);
+    subscription.close();
+    await subscription.done;
+    assert.throws(() => new OpenDhtProxy("https://proxy.example", { listenIdleMs: 3600001 }), TypeError);
+});

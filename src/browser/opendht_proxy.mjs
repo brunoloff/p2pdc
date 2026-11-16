@@ -16,12 +16,15 @@ function bounds(options) {
     const result = { maxValueBytes: options.maxValueBytes ?? 32768,
                      maxValues: options.maxValues ?? 512,
                      maxTotalBytes: options.maxTotalBytes ?? 1048576,
-                     timeoutMs: options.timeoutMs ?? 10000 };
+                     timeoutMs: options.timeoutMs ?? 10000,
+                     listenIdleMs: options.listenIdleMs ?? 300000,
+                     maxRecordsPerSecond: options.maxRecordsPerSecond ?? 256 };
     for (const value of Object.values(result)) {
         if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError("invalid proxy limits");
     }
     if (result.maxValueBytes > 32768 || result.maxValues > 1024 ||
-        result.maxTotalBytes > 16 * 1024 * 1024 || result.timeoutMs > 600000) {
+        result.maxTotalBytes > 16 * 1024 * 1024 || result.timeoutMs > 600000 ||
+        result.listenIdleMs > 3600000 || result.maxRecordsPerSecond > 65536) {
         throw new TypeError("proxy limits exceed supported bounds");
     }
     return result;
@@ -50,6 +53,16 @@ function checkResponse(response, scope) {
     return response;
 }
 function lineLimit(maxValueBytes) { return 4 * Math.ceil(maxValueBytes / 3) + 4096; }
+// Admits at most perSecond records per one-second window; the rest are dropped
+// so a hostile proxy cannot flood the WebAssembly heap through one stream.
+function rateGate(perSecond) {
+    let start = performance.now(), count = 0;
+    return () => {
+        const now = performance.now();
+        if (now - start >= 1000) { start = now; count = 0; }
+        return ++count <= perSecond;
+    };
+}
 function requestError(error, scope) {
     return scope.timedOut() ? new ProxyError("timeout", "proxy request timed out") : error;
 }
@@ -136,27 +149,48 @@ export class OpenDhtProxy {
     listen(key, onRecord, signal) {
         if (typeof onRecord !== "function") throw new TypeError("record callback is required");
         const url = this.url(key, true);
-        const scope = requestScope(signal, this.limits.timeoutMs);
-        let closed = false;
-        let resolveReady;
-        const ready = new Promise((resolve) => { resolveReady = resolve; });
+        const state = { closed: false, scope: null, resolveReady: null };
+        const ready = new Promise((resolve) => { state.resolveReady = resolve; });
         const done = (async () => {
-            try {
-                const response = await this.request(url, { method: "GET" }, scope);
-                scope.disarm();
-                if (scope.timedOut()) throw new ProxyError("timeout", "proxy request timed out");
-                resolveReady(!scope.signal.aborted);
-                await readLines(response.body, scope.signal, lineLimit(this.limits.maxValueBytes), (line) => {
-                    if (scope.signal.aborted) return;
-                    const record = decodeRecordOrDrop(line, this.limits.maxValueBytes);
-                    if (record && record.bytes.length <= this.limits.maxTotalBytes) onRecord(record);
-                });
-                if (!scope.signal.aborted) throw new ProxyError("stream_closed", "proxy listen stream ended");
-                if (!closed) throw new DOMException("request aborted", "AbortError");
-            } catch (error) {
-                if (!(closed && scope.signal.aborted && error?.name === "AbortError")) throw error;
-            } finally { resolveReady(false); scope.dispose(); }
+            try { while (await this.listenOnce(url, onRecord, signal, state)); }
+            finally { state.resolveReady(false); }
         })();
-        return { ready, done, close: () => { closed = true; scope.close(); } };
+        return { ready, done, close: () => { state.closed = true; state.scope?.close(); } };
+    }
+    // One listen request. The proxy sends no keep-alives, so a stalled
+    // connection looks like a quiet key: after listenIdleMs without a record the
+    // stream is restarted transparently (resolves true). Re-sent records are
+    // deduplicated by the verifying layers above.
+    async listenOnce(url, onRecord, signal, state) {
+        const scope = requestScope(signal, this.limits.timeoutMs);
+        state.scope = scope;
+        if (state.closed) scope.close();
+        let idle = false, timer = null;
+        const touch = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => { idle = true; scope.close(); }, this.limits.listenIdleMs);
+        };
+        const admit = rateGate(this.limits.maxRecordsPerSecond);
+        try {
+            const response = await this.request(url, { method: "GET" }, scope);
+            scope.disarm();
+            if (scope.timedOut()) throw new ProxyError("timeout", "proxy request timed out");
+            state.resolveReady(!scope.signal.aborted);
+            touch();
+            await readLines(response.body, scope.signal, lineLimit(this.limits.maxValueBytes), (line) => {
+                if (scope.signal.aborted) return;
+                touch();
+                const record = decodeRecordOrDrop(line, this.limits.maxValueBytes);
+                if (record && record.bytes.length <= this.limits.maxTotalBytes && admit()) onRecord(record);
+            });
+            if (!scope.signal.aborted) throw new ProxyError("stream_closed", "proxy listen stream ended");
+            if (idle && !state.closed) return true;
+            if (!state.closed) throw new DOMException("request aborted", "AbortError");
+            return false;
+        } catch (error) {
+            if (idle && !state.closed && error?.name === "AbortError") return true;
+            if (!(state.closed && scope.signal.aborted && error?.name === "AbortError")) throw error;
+            return false;
+        } finally { clearTimeout(timer); scope.dispose(); }
     }
 }

@@ -33,7 +33,7 @@ class LineBuffer {
     flush() {
         if (this.skipping) { this.skipping = false; return; }
         if (this.used && this.bytes[this.used - 1] === 13) --this.used;
-        if (!this.used) throw new ProxyError("invalid_record", "empty proxy record");
+        if (!this.used) return; // blank keep-alive line
         let text;
         try { text = this.decoder.decode(this.bytes.subarray(0, this.used)); }
         catch { throw new ProxyError("invalid_record", "invalid UTF-8 in proxy record"); }
