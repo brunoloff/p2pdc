@@ -33,7 +33,17 @@ nonce and the peer's nonce after receiving the peer's hello. Confirmation also
 repeats the sender's receive limit. A connection becomes ready after its own
 confirmation is sent and the peer's matching confirmation is received. The
 application-message limit is the smaller of the two receive limits. Invalid
-records or state transitions terminate the attempt.
+records or state transitions terminate the attempt. In particular, an
+implementation terminates the attempt when:
+
+- the peer's hello carries the same nonce as the local hello;
+- a second hello arrives, or any control record arrives after the connection
+  became ready;
+- the limit in the peer's confirmation differs from the limit in its hello.
+
+Until the handshake completes, a receiver accepts only channel messages that
+fit one control record (the marker byte plus the 139-byte record); a larger
+announced total size ends the attempt before any memory is reserved.
 
 The [test-only hello vector](../tests/handshake_vector.inc) is a record without
 the channel marker or outer framing, using the fixed inputs in

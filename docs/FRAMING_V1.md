@@ -18,7 +18,9 @@ must fit the local frame limit. An offset cannot exceed the total size, and a fr
 extend beyond it. A nonempty message cannot have an empty fragment. An empty
 message is represented by a single frame with total size and offset zero and no
 payload. The reassembler requires the first offset to be zero, then contiguous
-offsets with the same identifier and total size; an invalid sequence resets it.
+offsets with the same identifier and total size. An invalid sequence resets the
+reassembler, and the reliable channel then fails the connection: framing errors
+are terminal.
 
 The reassembled channel message begins with a one-byte gate marker: `00` for
 handshake control, or `01` for application bytes. Application data is accepted
