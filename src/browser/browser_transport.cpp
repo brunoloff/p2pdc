@@ -122,6 +122,7 @@ struct BrowserTransportImpl {
     BrowserTransportCallbacks callbacks;
     bool closed = false;
     bool event(unsigned kind, unsigned value, ByteView first, ByteView second);
+    bool reject_event();
     bool control(unsigned kind, unsigned value);
     void close();
 };
@@ -205,7 +206,7 @@ bool BrowserTransportImpl::event(unsigned kind, unsigned value, ByteView first, 
         break;
     case 2:
         if (value > 3)
-            return false;
+            return reject_event();
         callbacks.on_state(static_cast<BrowserTransportState>(value));
         break;
     case 3:
@@ -238,9 +239,16 @@ bool BrowserTransportImpl::control(unsigned kind, unsigned value) {
         callbacks.on_candidate_applied(value, false);
         break;
     default:
-        return false;
+        return reject_event();
     }
     return !closed;
+}
+// An event the bridge should never produce means the JS and C++ halves
+// disagree; report it as a transport failure rather than closing silently.
+bool BrowserTransportImpl::reject_event() {
+    callbacks.on_error(BrowserTransportError::Transport);
+    close();
+    return false;
 }
 void BrowserTransportImpl::close() {
     if (closed)

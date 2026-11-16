@@ -16,6 +16,12 @@ EM_JS(void, fail_latest_transport, (int resource), {
     entries[entries.length - 1].transport.fail("test failure", resource ? "resource" : "transport");
 });
 
+// Delivers a state value the bridge never produces to the newest transport.
+EM_JS(int, send_invalid_state_to_latest_transport, (), {
+    const ids = Array.from(Module.p2pdcWebRtcBridge.entries.keys());
+    return Module._p2pdc_webrtc_event(ids[ids.length - 1], 2, 9, 0, 0, 0, 0);
+});
+
 namespace {
 struct Probe : std::enable_shared_from_this<Probe> {
     Probe(Runtime &runtime, bool relay, std::function<void(bool)> done)
@@ -33,6 +39,7 @@ struct Probe : std::enable_shared_from_this<Probe> {
     unsigned descriptions = 0, candidates = 0, errors = 0;
     BrowserTransportCallbacks handlers(unsigned index);
     bool rejects_invalid_settings();
+    bool reports_invalid_bridge_event();
     void check_errors();
     void start();
     void description(unsigned index, std::string value);
@@ -99,6 +106,16 @@ bool Probe::rejects_invalid_settings() {
     }
     return invalid_callbacks && invalid_relay;
 }
+bool Probe::reports_invalid_bridge_event() {
+    bool reported = false;
+    auto callbacks = handlers(0);
+    callbacks.on_error = [&reported](BrowserTransportError error) {
+        reported = error == BrowserTransportError::Transport;
+    };
+    BrowserTransport transport(BrowserRole::Answerer, IceConfig{}, BrowserTransportLimits{},
+                               callbacks);
+    return send_invalid_state_to_latest_transport() == 0 && reported;
+}
 void Probe::check_errors() {
     auto weak = weak_from_this();
     for (unsigned index = 0; index < 2; ++index) {
@@ -122,7 +139,7 @@ void Probe::check_errors() {
 }
 void Probe::start() {
     keepalive = shared_from_this();
-    if (!rejects_invalid_settings()) {
+    if (!rejects_invalid_settings() || !reports_invalid_bridge_event()) {
         finish(false);
         return;
     }
