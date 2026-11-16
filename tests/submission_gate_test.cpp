@@ -42,3 +42,22 @@ TEST(SubmissionGate, CloseWaitsForSubmissionAlreadyInProgress) {
     closer.get();
     EXPECT_FALSE(gate.post([] {}));
 }
+
+TEST(SubmissionGate, InlineExecutorIsRejectedWithoutRunningTheTask) {
+    SubmissionGate gate([](auto task) { task(); });
+    int count = 0;
+    EXPECT_THROW(static_cast<void>(gate.post([&] { ++count; })), std::logic_error);
+    EXPECT_EQ(count, 0);
+    gate.close();
+    EXPECT_FALSE(gate.post([&] { ++count; }));
+}
+
+TEST(SubmissionGate, TaskRunOnAnotherThreadDuringSubmissionIsAllowed) {
+    std::vector<std::thread> threads;
+    std::promise<void> ran;
+    SubmissionGate gate([&](auto task) { threads.emplace_back(std::move(task)); });
+    EXPECT_TRUE(gate.post([&] { ran.set_value(); }));
+    EXPECT_EQ(ran.get_future().wait_for(10s), std::future_status::ready);
+    for (auto &thread : threads)
+        thread.join();
+}

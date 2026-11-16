@@ -74,6 +74,10 @@ use one worker thread; WebAssembly uses the browser event loop. Pass
 node methods to that same executor; their callbacks run on that executor.
 For GUI updates, dispatch from those callbacks to the GUI's own event loop.
 Applications may instead supply their own executor and scheduler as before.
+A supplied executor must queue tasks and run them later, in order, on its own
+context; it must never run a task inline before returning. Internal backend
+submissions detect inline execution and fail with `std::logic_error` rather
+than deadlocking.
 
 Keep the runtime alive until every node has completed asynchronous shutdown and
 its handles have been released. Destruction discards queued work and waits for

@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <deque>
+#include <future>
 
 using namespace p2pdc;
 using namespace p2pdc::detail;
@@ -229,4 +230,25 @@ TEST_F(RecoveringMailboxTest, RegistrationFailureRetriesQueuedTransientError) {
     EXPECT_EQ(statuses, (std::vector<RecoveryState>{RecoveryState::Reconnecting}));
     drain();
     EXPECT_TRUE(errors.empty());
+}
+
+TEST(NativeMailboxInlineExecutor, InlineExecutorIsDetectedInsteadOfDeadlocking) {
+    auto backend = std::make_shared<Store>();
+    std::vector<Bytes> records;
+    Executor inline_executor = [](std::function<void()> task) { task(); };
+    auto created = NativeMailbox::create(
+        RecordStore(backend), {std::byte{1}}, {4096, 16, 1024}, MemoryBudget(4096),
+        inline_executor,
+        {[&](Bytes value) { records.push_back(std::move(value)); },
+         [](MailboxError, std::optional<StoreError>) {}, [](bool) {}});
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<NativeMailbox>>(created));
+    auto mailbox = std::move(std::get<std::unique_ptr<NativeMailbox>>(created));
+    ASSERT_EQ(backend->watches.size(), 1U);
+    auto finished = std::async(std::launch::async, [&] {
+        backend->watches[0]->callback(StoreBatch{{Bytes{std::byte{7}}}, {}, false});
+        backend->watches[0]->callback(StoreBatch{{}, StoreError::PermanentFailure, false});
+    });
+    ASSERT_EQ(finished.wait_for(10s), std::future_status::ready) << "mailbox deadlocked";
+    EXPECT_TRUE(records.empty());
+    EXPECT_FALSE(mailbox->is_open());
 }
