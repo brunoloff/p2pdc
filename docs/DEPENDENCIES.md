@@ -24,3 +24,19 @@ patch libnice and libdatachannel. The [WebAssembly instructions](WEBASSEMBLY_INT
 pin the libsodium source archive by SHA-256. Other versions have not been
 established by these checks; the list is not a claim that older or newer
 versions necessarily fail.
+
+## libdatachannel patch: send failures throw
+
+The libdatachannel patch makes a message that SCTP will never deliver (not
+connected, send queue stopped, or disconnected mid-send) throw instead of
+returning `false`, so p2pdc can tell "accepted but buffered" from "lost".
+`SctpTransport::trySendMessage` also runs on internal paths. At commit
+`9e6a13ab` every internal caller that can reach the throw catches it:
+`SctpTransport::doRecv` (the ACK sent by `IncomingDataChannel::processOpenMessage`
+and any other send triggered while processing received data), `doFlush`,
+`flush` (used by the SENDER_DRY notification), and
+`PeerConnection::iterateDataChannels` (which wraps `DataChannel::open`). The
+remaining callers are application-facing (`DataChannel::send`, and
+`createDataChannel` when SCTP is already connected) and propagate to p2pdc,
+whose `NativeTransport::send` catches the exception and fails the transport.
+Re-check these call sites when updating libdatachannel.
