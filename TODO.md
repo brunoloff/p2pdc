@@ -82,7 +82,9 @@ without requiring a fixed coordinator or prescribing a connection topology.
 - [ ] Add optional disposable unordered, non-retransmitted messages, including
   negotiation, limits, backpressure, and fairness tests.
 - [ ] Verify relay-only privacy, including whether all direct ICE traffic is
-  prevented; do not claim this privacy property before verification.
+  prevented; do not claim this privacy property before verification. Signaled
+  candidates and SDP are filtered (audit #3); the network behaviour of the ICE
+  backends is still unverified.
 - [ ] Review memory and load limits, including backend memory, stalled peers,
   concurrent attempts, sustained load, and recovery under pressure.
 - [ ] Decide which operation/connection identifiers and counters to expose.

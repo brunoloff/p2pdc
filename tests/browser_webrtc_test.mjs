@@ -116,6 +116,23 @@ test("local candidates wait for the local description for both roles", async () 
     }
 });
 
+test("relay-only mode signals only redacted relay candidates and filtered descriptions", async () => {
+    const iceServers = [{ urls: "turn:relay.example", username: "user", credential: "password" }];
+    const { transport, peer, events } = setup({ relayPolicy: "requireLocalRelay", iceServers });
+    peer.createOffer = async () => ({ type: "offer", sdp: "c=IN IP4 10.0.0.2\r\na=candidate:1 1 udp 9 10.0.0.2 4 typ host" });
+    await transport.startOffer(); await settle();
+    const signal = (candidate) => peer.onicecandidate({ candidate: { candidate, toJSON: () => ({ candidate, sdpMid: "0" }) } });
+    signal("candidate:1 1 udp 9 10.0.0.2 4 typ host");
+    signal("candidate:2 1 udp 8 198.51.100.9 3478 typ relay raddr 10.0.0.2 rport 4");
+    await settle();
+    assert.equal(events.descriptions.length, 1);
+    assert.doesNotMatch(events.descriptions[0].sdp, /10\.0\.0\.2/);
+    assert.deepEqual(events.candidates.map((value) => value.candidate),
+                     ["candidate:2 1 udp 8 198.51.100.9 3478 typ relay raddr 0.0.0.0 rport 0"]);
+    assert.notEqual(transport.status, "failed");
+    transport.close();
+});
+
 test("local candidate queue is bounded and close suppresses pending delivery", async () => {
     const first = setup();
     const candidate = { candidate: "candidate:early", toJSON: () => ({ candidate: "candidate:early", sdpMid: "0" }) };

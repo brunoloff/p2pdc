@@ -220,7 +220,11 @@ The experimental native transport is enabled by default; add
 required feature symbol and cannot be linked. Relay-only mode additionally
 requires the libnice backend and its `force-relay` property. This setting and
 selected-pair checks have not yet been independently verified to prevent all
-direct ICE traffic; do not rely on this mode for network privacy yet.
+direct ICE traffic; do not rely on this mode for network privacy yet. On both
+native and browser targets, relay-only mode signals only relay candidates, with
+their related address redacted to `0.0.0.0:0`, and clears SDP connection
+addresses that are not relay addresses, so host and server-reflexive addresses
+are not sent to the peer through signaling.
 
 For a fresh Linux checkout, the following builds the patched dependencies
 locally. It requires GLib/GIO development files, OpenSSL, Meson, pkg-config,

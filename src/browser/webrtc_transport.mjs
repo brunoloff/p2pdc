@@ -1,3 +1,4 @@
+import { relayFilteredCandidate, relayFilteredDescription } from "./webrtc_relay_filter.mjs";
 import { routeKind, selectedPair } from "./webrtc_route.mjs";
 import { settings } from "./webrtc_settings.mjs";
 import { observeWithDeadline, recoverExpiredRequest } from "./webrtc_stats.mjs";
@@ -79,7 +80,7 @@ export class BrowserWebRtcTransport {
     }
     localCandidate(candidate) {
         try {
-            const value = candidate.toJSON();
+            const value = relayFilteredCandidate(candidate.toJSON(), this.relayPolicy === "requireLocalRelay"); if (value === null) return;
             if (!value || typeof value.candidate !== "string" || !value.candidate || value.candidate.length > 4096 ||
                 (value.sdpMid != null && (typeof value.sdpMid !== "string" || value.sdpMid.length > 256)) ||
                 (value.sdpMLineIndex != null && (!Number.isInteger(value.sdpMLineIndex) ||
@@ -103,7 +104,8 @@ export class BrowserWebRtcTransport {
         } catch { this.fail("invalid local candidate"); }
     }
     emitLocalDescription() {
-        const description = this.peer.localDescription.toJSON();
+        const description = relayFilteredDescription(this.peer.localDescription.toJSON(),
+                                                     this.relayPolicy === "requireLocalRelay");
         this.emit("onDescription", description);
         this.localDescriptionQueued = true;
         for (const candidate of this.localCandidates) this.emit("onCandidate", candidate);

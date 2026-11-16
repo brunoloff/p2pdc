@@ -1,6 +1,7 @@
 #include "native_transport.hpp"
 #include "inbound_queue.hpp"
 #include "native_config.hpp"
+#include "relay_candidate_filter.hpp"
 
 #include <atomic>
 #include <stdexcept>
@@ -79,9 +80,17 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
 
     void bind_peer() {
         peer->onLocalDescription(backend([](Impl &self, rtc::Description description) {
+            if (self.policy == NativeRelayPolicy::RequireLocalRelay)
+                (void)retain_relay_candidates(description);
             self.emit(self.callbacks.on_description, std::move(description));
         }));
         peer->onLocalCandidate(backend([](Impl &self, rtc::Candidate candidate) {
+            if (self.policy == NativeRelayPolicy::RequireLocalRelay) {
+                auto relay = relay_only_candidate(candidate);
+                if (!relay)
+                    return;
+                candidate = std::move(*relay);
+            }
             self.emit(self.callbacks.on_candidate, std::move(candidate));
         }));
         peer->onDataChannel(backend([](Impl &self, std::shared_ptr<rtc::DataChannel> incoming) {
