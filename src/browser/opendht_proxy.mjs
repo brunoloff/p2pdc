@@ -122,12 +122,14 @@ export class OpenDhtProxy {
         const url = this.url(key);
         const scope = requestScope(signal, this.limits.timeoutMs);
         const values = [], seen = new Set();
-        let total = 0, inspected = 0;
+        let total = 0, inspected = 0, truncated = false;
         try {
             const response = await this.request(url, { method: "GET" }, scope);
             if (response.body) await readLines(response.body, scope.signal, lineLimit(this.limits.maxValueBytes), (line) => {
-                // Records beyond the limits are untrusted surplus: drop them.
-                if (options.deduplicateByContent && ++inspected > this.limits.maxValues * 8) return;
+                // Records beyond the limits are untrusted surplus. After inspecting
+                // eight times maxValues lines, stop reading instead of decoding a
+                // hostile stream until the request times out.
+                if (++inspected > this.limits.maxValues * 8) { truncated = true; scope.close(); return; }
                 const record = decodeRecordOrDrop(line, this.limits.maxValueBytes);
                 if (!record) return;
                 const content = encodeBase64(record.bytes);
@@ -140,9 +142,11 @@ export class OpenDhtProxy {
                 total += record.bytes.length;
                 values.push(record);
             });
+            if (truncated) return values;
             if (scope.signal.aborted) throw new DOMException("request aborted", "AbortError");
             return values;
         } catch (error) {
+            if (truncated && error?.name === "AbortError") return values;
             throw requestError(error, scope);
         } finally { scope.dispose(); }
     }

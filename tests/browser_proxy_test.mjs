@@ -258,3 +258,17 @@ test("an idle listen stream is restarted transparently and close still ends it",
     await subscription.done;
     assert.throws(() => new OpenDhtProxy("https://proxy.example", { listenIdleMs: 3600001 }), TypeError);
 });
+
+test("lookup stops reading after inspecting eight times maxValues lines", async () => {
+    let pulls = 0;
+    const repeated = encoder.encode(`${record("AQ==", "1")}\n`);
+    const endless = { ok: true, status: 200, body: new ReadableStream({
+        pull(controller) { ++pulls; controller.enqueue(repeated); },
+    }) };
+    const client = proxy(async () => endless, { maxValues: 2, timeoutMs: 5000 });
+    const started = Date.now();
+    const values = await client.get(key);
+    assert.deepEqual(values.map((value) => [...value.bytes]), [[1]]);
+    assert.ok(pulls <= 20, `read ${pulls} chunks`);
+    assert.ok(Date.now() - started < 4000);
+});
