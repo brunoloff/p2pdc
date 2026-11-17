@@ -119,8 +119,9 @@ struct AnnounceOptions {
     // By default every lease of a node advertises the node's identity (see
     // Node::identity()), so members of different groups, or of one group over
     // time, can recognise the same node. When true, this lease uses signing and
-    // recipient keys generated for it alone and never reused. The signaling
-    // inbox key is stable for a lease's lifetime in either case.
+    // recipient keys generated for it alone and never reused. These lease keys
+    // are not returned by Node::identity() or exposed directly by Lease. The
+    // signaling inbox key is stable for a lease's lifetime in either case.
     bool fresh_identity = false;
 };
 
@@ -137,7 +138,8 @@ struct AnnounceHandlers {
 // but cannot retract already published records. The publication limit includes
 // retries; it applies per 120-second window in both protocols. Failed puts are
 // retried with exponential backoff, and an unpublished record that expires is
-// replaced by a fresh one instead of ending the lease.
+// replaced by a fresh one instead of ending the lease. Exhausting the window's
+// publication limit is terminal even if the attempts failed.
 class Lease {
   public:
     ~Lease();

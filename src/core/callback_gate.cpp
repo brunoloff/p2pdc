@@ -35,7 +35,16 @@ void finish_callback(const std::shared_ptr<CallbackGateState> &state) {
 
 struct FinishOnExit {
     std::shared_ptr<CallbackGateState> state;
-    ~FinishOnExit() { finish_callback(state); }
+    ~FinishOnExit() {
+        try {
+            finish_callback(state);
+        } catch (const std::exception &error) {
+            std::cerr << "p2pdc: callback gate could not schedule its final callback: "
+                      << error.what() << '\n';
+        } catch (...) {
+            std::cerr << "p2pdc: callback gate could not schedule its final callback\n";
+        }
+    }
 };
 } // namespace p2pdc::detail
 
@@ -77,6 +86,8 @@ bool CallbackGate::post(std::function<void()> callback) const {
         } catch (const std::exception &final_error) {
             std::cerr << "p2pdc: callback gate could not schedule its final callback: "
                       << final_error.what() << '\n';
+        } catch (...) {
+            std::cerr << "p2pdc: callback gate could not schedule its final callback\n";
         }
         std::rethrow_exception(error);
     }
@@ -88,12 +99,12 @@ bool CallbackGate::close(std::function<void()> final_callback) const {
         throw std::invalid_argument("callback gate requires a final callback");
     }
     auto state = state_;
-    std::function<void()> guarded_final =
-        [abandoned = state->abandoned, callback = std::move(final_callback)] {
-            if (!abandoned->load()) {
-                callback();
-            }
-        };
+    std::function<void()> guarded_final = [abandoned = state->abandoned,
+                                           callback = std::move(final_callback)] {
+        if (!abandoned->load()) {
+            callback();
+        }
+    };
     bool schedule = false;
     {
         std::lock_guard lock(state->mutex);

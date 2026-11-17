@@ -72,6 +72,11 @@ without requiring a fixed coordinator or prescribing a connection topology.
 
 ### Other post-alpha work
 
+- [ ] Expose the public identity of a fresh-identity lease so applications can
+  identify their own advertisement and share or verify its keys.
+- [ ] Consider waiting for the next publication window when a lease exhausts
+  its attempt budget, so low configured limits do not terminate it during an
+  outage.
 - [x] Improve behavior when the per-lease replay cache fills: new offers are
   now dropped while the listener stays open, without evicting replay entries.
 - [ ] Validate Safari and mobile browsers, which are outside the first alpha's
@@ -85,6 +90,10 @@ without requiring a fixed coordinator or prescribing a connection topology.
   prevented; do not claim this privacy property before verification. Signaled
   candidates and SDP are filtered (audit #3); the network behaviour of the ICE
   backends is still unverified.
+- [ ] Investigate the Firefox required-relay smoke-test filter assertion: the
+  connection succeeds with a relayed route, but the filter observes no blocked
+  direct packets. Preserve meaningful firewall validation without assuming the
+  browser attempts a direct connection.
 - [ ] Review memory and load limits, including backend memory, stalled peers,
   concurrent attempts, sustained load, and recovery under pressure.
 - [ ] Decide which operation/connection identifiers and counters to expose.

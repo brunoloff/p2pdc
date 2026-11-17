@@ -12,8 +12,10 @@ struct CallbackGateState;
 }
 
 // A gate shares the executor's asynchronous, serial submission contract. If the
-// executor throws, post() rethrows and the callback is not admitted. close() rejects new posts and invokes its final callback only after
-// all admitted callbacks return, including submissions racing with close().
+// executor throws, post() rethrows and the callback is not admitted. close()
+// rejects new posts and invokes its final callback only after all admitted
+// callbacks return, including submissions racing with close(). If the executor
+// rejects a deferred final callback, the failure is logged and it cannot run.
 // It does not itself cancel backend operations or prevent separate ungated posts.
 // abandon() suppresses callbacks not yet admitted for execution, including the
 // final callback. A callback concurrently admitted before abandonment may run.

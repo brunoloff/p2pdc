@@ -7,7 +7,6 @@ const label = "p2pdc/reliable/v1";
 const maxSignalBytes = 32768;
 const routeRetryMs = 250;
 const emptyRoute = (used) => ({ current: "unknown", turnHistory: used ? "used" : "unknown", selectedPair: null });
-
 // Raw transport only: signaling and peer authentication must be supplied by
 // the caller. All methods and callbacks run on one browser event loop.
 export class BrowserWebRtcTransport {
@@ -119,7 +118,8 @@ export class BrowserWebRtcTransport {
         }
         this.channel = channel;
         channel.binaryType = "arraybuffer";
-        channel.bufferedAmountLowThreshold = Math.floor(this.limits.maxBufferBytes / 4); // refill before the buffer drains
+        channel.bufferedAmountLowThreshold = Math.min(Math.floor(this.limits.maxBufferBytes / 4),
+                                                      this.limits.maxBufferBytes - this.limits.maxMessageBytes);
         channel.onopen = () => this.update();
         channel.onclose = () => this.fail("data channel closed");
         channel.onerror = () => this.fail("data channel error");

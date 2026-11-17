@@ -219,9 +219,10 @@ NativeReliableLink::NativeReliableLink(rtc::Configuration config, NativeRelayPol
     impl_ = std::make_shared<Impl>(executor, std::move(callbacks), limits, budget);
     impl_->transport = std::make_unique<NativeTransport>(std::move(config), policy, executor,
                                                          impl_->native_callbacks(), inbound_limits);
-    // Wake the pump at a quarter of the high-water mark so it refills the
-    // backend buffer before it drains, instead of stop-and-wait.
-    impl_->transport->set_writable_threshold(limits.backend_high_water / 4);
+    // At the wakeup threshold there must be room for even the largest frame.
+    const auto frame_room =
+        limits.backend_high_water > advertised_max ? limits.backend_high_water - advertised_max : 0;
+    impl_->transport->set_writable_threshold(std::min(limits.backend_high_water / 4, frame_room));
     impl_->channel = std::make_unique<ReliableChannel>(limits, std::move(budget), *impl_, executor,
                                                        impl_->channel_callbacks());
 }

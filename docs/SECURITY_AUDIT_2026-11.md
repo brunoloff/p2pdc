@@ -210,7 +210,8 @@ already correct; the commit or note records why.
 
 - Over-limit DHT records, full replay/peer tables and small clock regressions
   no longer end watches, leases or listeners.
-- Leases survive outages instead of failing with an expired pending record.
+- Leases retry outages with backoff and replace expired pending records, but
+  still fail if attempts exhaust the configured per-window publication limit.
 - `Identity::sign` / `verify_signature` now apply an application prefix.
 - `HandshakeExchange` takes `std::shared_ptr<const Identity>`.
 - ICE hosts accept only host-name characters (no IPv6 zone identifiers).
@@ -231,3 +232,24 @@ passed serially, and every JS unit test file passed except the two
 - Android builds were not rebuilt.
 - One intermittent failure of `ExchangesLargeFragmentedMessagesWithinConfiguredLimits`
   was seen once and did not reproduce in later runs.
+
+### Follow-up review
+
+- The L6 quarter-buffer threshold could stall a sender when a valid maximum
+  frame is larger than the remaining space at that threshold. The threshold is
+  now also bounded by the space needed for the largest frame.
+- If the executor rejects a deferred final callback, the callback gate now
+  logs the failure instead of letting an exception escape a destructor and
+  terminate the process. The final callback cannot run in that case.
+- The opt-in fresh lease identity is not exposed directly to applications;
+  `Node::identity()` still returns the node's identity. See TODO.md.
+- Unlike the original #5 plan, failed puts count toward the publication limit.
+  Exhausting that limit remains terminal, including during an outage. This is
+  documented in the public API; waiting for the next window is a follow-up.
+- Follow-up checks passed all 598 native tests, 195 JavaScript unit tests,
+  Chromium persistent and forced-TURN smokes, and Firefox persistent and
+  automatic TURN-fallback smokes. Firefox's required-relay smoke connected and
+  reported a relayed route, but its harness failed twice because its network
+  filter observed no blocked direct packets. That check remains unresolved;
+  no assertion was removed. An Android arm64 compile/link was also performed,
+  without an on-device run.

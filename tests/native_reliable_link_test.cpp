@@ -153,10 +153,10 @@ struct RawPeerPair {
         out.on_error = [this](ConnectError category, std::string) { errors.push_back(category); };
         return out;
     }
-    void create() {
+    void create(std::size_t frame_maximum = 1024) {
         MemoryBudget budget(4U * 1024U * 1024U);
-        const ReliableChannelLimits limits{{4096, 1024}, 4096, 4, 4096, 4};
-        NativeReceiveLimits inbound{budget, 8192, 64, 1024};
+        const ReliableChannelLimits limits{{4096, frame_maximum}, 4096, 4, 4096, 4};
+        NativeReceiveLimits inbound{budget, 8192, 64, 4096};
         raw = std::make_unique<NativeTransport>(rtc::Configuration{}, NativeRelayPolicy::Automatic,
                                                 loop.executor(), raw_callbacks());
         link = std::make_unique<NativeReliableLink>(rtc::Configuration{},
@@ -177,6 +177,15 @@ TEST(NativeReliableLink, WakesItsPumpAtAQuarterOfTheHighWaterMark) {
     RawPeerPair pair;
     pair.create();
     EXPECT_EQ(pair.link->writable_threshold(), 1024U);
+}
+
+TEST(NativeReliableLink, WakeupThresholdLeavesRoomForTheLargestFrame) {
+    RawPeerPair nearly_full;
+    nearly_full.create(4095);
+    EXPECT_EQ(nearly_full.link->writable_threshold(), 1U);
+    RawPeerPair full;
+    full.create(4096);
+    EXPECT_EQ(full.link->writable_threshold(), 0U);
 }
 
 TEST(NativeReliableLink, ReportsMalformedPeerFrameAsProtocolFailure) {

@@ -55,7 +55,10 @@ the retry count and initial delay. An already established data channel is not
 closed merely because discovery is interrupted. By default, announcements use an ephemeral node
 identity and a fresh instance per lease. Because every lease of a node then
 shares one identity, peers in different groups can recognise the same node;
-set `AnnounceOptions::fresh_identity` to give a lease keys of its own. Applications that need a stable
+set `AnnounceOptions::fresh_identity` to give a lease keys of its own. Those
+lease keys are not exposed directly; `Node::identity()` continues to return
+the node's identity, so it cannot identify a fresh-identity advertisement.
+Applications that need a stable
 identity can call `Node::create_with_identity` with an Ed25519 signing seed and
 an X25519 recipient secret; `Node::identity` returns their public keys. The
 caller owns and must securely store and wipe both input buffers. Imported

@@ -64,7 +64,11 @@ TEST(CallbackGate, AbandonAllowsAlreadyRunningCallbackToFinish) {
     auto released = resume.get_future().share();
     int calls = 0;
     CallbackGate gate([&](auto task) { tasks.push_back(std::move(task)); });
-    EXPECT_TRUE(gate.post([&] { entered.set_value(); released.wait(); ++calls; }));
+    EXPECT_TRUE(gate.post([&] {
+        entered.set_value();
+        released.wait();
+        ++calls;
+    }));
     auto task = std::move(tasks.front());
     std::thread worker(std::move(task));
     entered.get_future().wait();
@@ -223,4 +227,24 @@ TEST(CallbackGate, ThrowingExecutorAfterCloseStillReportsTheSubmissionError) {
     ASSERT_EQ(tasks.size(), 2U);
     tasks.back()();
     EXPECT_TRUE(finished);
+}
+
+TEST(CallbackGate, RejectedDeferredFinalCallbackDoesNotTerminate) {
+    for (bool nonstandard : {false, true}) {
+        std::function<void()> task;
+        bool reject = false, finished = false;
+        CallbackGate gate([&](auto submitted) {
+            if (reject) {
+                if (nonstandard)
+                    throw 1;
+                throw std::runtime_error("executor stopped");
+            }
+            task = std::move(submitted);
+        });
+        EXPECT_TRUE(gate.post([] {}));
+        EXPECT_TRUE(gate.close([&] { finished = true; }));
+        reject = true;
+        EXPECT_NO_THROW(task());
+        EXPECT_FALSE(finished);
+    }
 }
