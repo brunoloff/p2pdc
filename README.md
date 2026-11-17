@@ -1,8 +1,8 @@
 # p2p-discovery-connect
 
-This library is licensed under the GNU General Public License, version 3 or
-any later version; see [COPYING](COPYING). Third-party dependencies and their
-upstream code retain their respective licenses.
+This library is licensed under the MIT License; see [LICENSE](LICENSE).
+Third-party dependencies and their upstream code retain their respective
+licenses.
 
 An experimental C++ library providing OpenDHT discovery and
 authenticated WebRTC data channels with explicit TURN route reporting. Its
