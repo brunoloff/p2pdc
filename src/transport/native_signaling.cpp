@@ -1,5 +1,7 @@
 #include "native_signaling.hpp"
 
+#include "datagram_support.hpp"
+
 #include <string>
 #include <utility>
 
@@ -9,13 +11,14 @@ NativeSignaling::NativeSignaling(NativeSignalBinding binding, ByteView capabilit
                                  NativeReliableLink &link, CandidateLimits limits,
                                  MemoryBudget budget, std::size_t max_candidate_bytes,
                                  std::size_t max_candidates, std::function<bool(Bytes)> submit,
-                                 std::function<bool(SignalingKind)> control)
+                                 std::function<bool(SignalingKind)> control, bool datagrams)
     : binding_(binding), link_(link), limits_(limits),
       session_(binding.local, binding.remote, binding.local_box, binding.remote_box,
                binding.attempt, binding.role, capability, 63),
       flow_(session_, limits, std::move(budget), max_candidate_bytes, max_candidates,
             {std::move(submit), [this](ByteView value) { return apply_description(value); },
-             [this](CandidateView value) { return apply_candidate(value); }, std::move(control)}) {}
+             [this](CandidateView value) { return apply_candidate(value); }, std::move(control)}),
+      datagrams_(datagrams) {}
 
 FlowResult NativeSignaling::state() const {
     return closed_ ? FlowResult::Closed : failed_ ? FlowResult::Failed : FlowResult::Accepted;
@@ -34,7 +37,10 @@ FlowResult NativeSignaling::local_description(const Identity &identity, ByteView
         return FlowResult::Failed;
     }
     try {
-        const auto text = std::string(value);
+        const auto attribute = binding_.role == HandshakeRole::Offerer ? datagram_offer_attribute
+                                                                       : datagram_answer_attribute;
+        const auto text =
+            datagrams_ ? advertise_datagrams(std::string(value), attribute) : std::string(value);
         const auto kind =
             binding_.role == HandshakeRole::Offerer ? SignalingKind::Offer : SignalingKind::Answer;
         auto result = flow_.send(identity, binding_.remote_box, capability, kind,
@@ -88,6 +94,10 @@ bool NativeSignaling::apply_description(ByteView payload) {
         const auto type = binding_.role == HandshakeRole::Offerer ? rtc::Description::Type::Answer
                                                                   : rtc::Description::Type::Offer;
         link_.set_remote_description(rtc::Description(text, type));
+        const auto attribute = binding_.role == HandshakeRole::Offerer ? datagram_answer_attribute
+                                                                       : datagram_offer_attribute;
+        if (datagrams_ && advertises_datagrams(text, attribute))
+            link_.enable_datagrams();
         return true;
     } catch (const std::exception &) {
         return false;

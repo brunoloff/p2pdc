@@ -22,6 +22,7 @@ struct BrowserMailboxCallbacks {
     std::function<void(BrowserTransportState)> on_transport;
     std::function<void()> on_signaling_unavailable;
     std::function<void(AttemptFailure)> on_failure;
+    std::function<void(Bytes)> on_datagram = {};
 };
 // Internal preauthorized single attempt. The caller owns discovery, consent,
 // deadlines and polling. Methods and callbacks run on one serialized executor;
@@ -36,6 +37,8 @@ class BrowserMailboxAttempt {
     BrowserMailboxAttempt &operator=(const BrowserMailboxAttempt &) = delete;
     [[nodiscard]] BrowserMailboxStart poll_start();
     [[nodiscard]] ChannelSend send(ByteView value);
+    [[nodiscard]] ChannelSend send_datagram(ByteView value);
+    [[nodiscard]] bool datagrams_available() const;
     [[nodiscard]] bool ready() const;
     [[nodiscard]] bool signaling_unavailable() const;
     [[nodiscard]] AttemptFailure failure_reason() const;

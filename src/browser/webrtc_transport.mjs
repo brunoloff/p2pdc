@@ -1,3 +1,5 @@
+import { BrowserDatagramChannel } from "./webrtc_datagrams.mjs";
+import { checkedLocalCandidate, checkedRemoteCandidate } from "./webrtc_candidates.mjs";
 import { relayFilteredCandidate, relayFilteredDescription } from "./webrtc_relay_filter.mjs";
 import { routeKind, selectedPair } from "./webrtc_route.mjs";
 import { settings } from "./webrtc_settings.mjs";
@@ -20,6 +22,7 @@ export class BrowserWebRtcTransport {
         this.peer = create({ iceServers: limits.servers,
                              iceTransportPolicy: options.relayPolicy === "requireLocalRelay" ? "relay" : "all" });
         this.channel = null;
+        this.datagrams = null;
         this.status = "connecting";
         this.closed = false;
         this.started = false;
@@ -80,23 +83,7 @@ export class BrowserWebRtcTransport {
     localCandidate(candidate) {
         try {
             const value = relayFilteredCandidate(candidate.toJSON(), this.relayPolicy === "requireLocalRelay"); if (value === null) return;
-            if (!value || typeof value.candidate !== "string" || !value.candidate || value.candidate.length > 4096 ||
-                (value.sdpMid != null && (typeof value.sdpMid !== "string" || value.sdpMid.length > 256)) ||
-                (value.sdpMLineIndex != null && (!Number.isInteger(value.sdpMLineIndex) ||
-                 value.sdpMLineIndex < 0 || value.sdpMLineIndex > 65535)) ||
-                (value.sdpMid == null && value.sdpMLineIndex == null) ||
-                (value.usernameFragment != null && (typeof value.usernameFragment !== "string" ||
-                 value.usernameFragment.length > 256))) throw new TypeError("invalid local candidate");
-            const encoder = new TextEncoder();
-            const candidateSize = encoder.encode(value.candidate).length;
-            const size = candidateSize + encoder.encode(value.sdpMid ?? "").length +
-                         encoder.encode(value.usernameFragment ?? "").length;
-            if (candidateSize > 4096 || size > 4608 ||
-                this.localCandidateCount >= 63 || size > 65536 - this.localCandidateBytes)
-                throw new RangeError("local candidate limits exceeded");
-            const copy = { candidate: value.candidate, sdpMid: value.sdpMid ?? null,
-                           sdpMLineIndex: value.sdpMLineIndex ?? null,
-                           usernameFragment: value.usernameFragment ?? null };
+            const { copy, size } = checkedLocalCandidate(value, this.localCandidateCount, this.localCandidateBytes);
             ++this.localCandidateCount; this.localCandidateBytes += size;
             if (this.localDescriptionQueued) this.emit("onCandidate", copy);
             else this.localCandidates.push(copy);
@@ -112,6 +99,12 @@ export class BrowserWebRtcTransport {
     }
     attach(channel) {
         if (this.closed) { channel.close(); return; }
+        if (channel.label === BrowserDatagramChannel.label) {
+            if (this.role === "offerer" || !this.datagrams?.adopt(channel)) {
+                channel.close(); this.fail("unexpected datagram data channel");
+            }
+            return;
+        }
         if (this.channel || channel.label !== label || !channel.ordered ||
             channel.maxPacketLifeTime !== null || channel.maxRetransmits !== null) {
             channel.close(); this.fail("unexpected or unreliable data channel"); return;
@@ -126,6 +119,24 @@ export class BrowserWebRtcTransport {
         channel.onbufferedamountlow = () => this.emit("onWritable");
         channel.onmessage = (event) => this.receive(event.data);
         this.update();
+    }
+    // Call once both sides are known to support datagrams.
+    enableDatagrams() {
+        if (this.closed || this.status === "failed" || this.datagrams || !this.handlers.onDatagram) return;
+        this.datagrams = new BrowserDatagramChannel((bytes) => {
+            if (!this.closed && this.status === "ready" && this.readyNotified) this.handlers.onDatagram(bytes);
+        });
+        if (this.role === "offerer") this.datagrams.open(this.peer);
+    }
+    datagramsAvailable() {
+        return !this.closed && this.status === "ready" && this.connected() && !!this.datagrams?.isOpen();
+    }
+    sendDatagram(bytes) {
+        if (this.closed) return "closed";
+        if (this.status === "failed") return "failed";
+        if (bytes.length > BrowserDatagramChannel.maxBytes) return "tooLarge";
+        if (!this.datagramsAvailable()) return "notReady";
+        return this.datagrams.send(bytes);
     }
     receive(value) {
         if (this.closed || this.status === "failed") return;
@@ -276,6 +287,7 @@ export class BrowserWebRtcTransport {
     release() {
         this.cancelRouteRetry();
         if (this.cancelStatsDeadline) { this.cancelStatsDeadline(); this.cancelStatsDeadline = null; }
+        this.datagrams?.close();
         if (this.channel) {
             this.channel.onopen = this.channel.onclose = this.channel.onerror = null;
             this.channel.onmessage = this.channel.onbufferedamountlow = null;
@@ -356,23 +368,9 @@ export class BrowserWebRtcTransport {
     async addRemoteCandidate(candidate) {
         if (this.closed || this.status === "failed" || !candidate || typeof candidate.candidate !== "string")
             throw new TypeError("invalid ICE candidate");
-        if (candidate.candidate.length > 4096) throw new RangeError("ICE candidate limits exceeded");
-        const mid = candidate.sdpMid ?? null, index = candidate.sdpMLineIndex ?? null;
-        const username = candidate.usernameFragment ?? null;
-        if ((mid !== null && (typeof mid !== "string" || mid.length > 256)) ||
-            (username !== null && (typeof username !== "string" || username.length > 256)) ||
-            (index !== null && (!Number.isInteger(index) || index < 0 || index > 65535)) ||
-            (mid === null && index === null)) throw new TypeError("invalid ICE candidate metadata");
-        const encoder = new TextEncoder();
-        const candidateSize = encoder.encode(candidate.candidate).length;
-        const size = candidateSize + encoder.encode(mid ?? "").length +
-                     encoder.encode(username ?? "").length;
-        if (!candidateSize || candidateSize > 4096 || size > 4608 || this.candidateCount >= 64 ||
-            size > 65536 - this.candidateBytes)
-            throw new RangeError("ICE candidate limits exceeded");
-        this.pendingCandidates.push({ candidate: { candidate: candidate.candidate, sdpMid: mid,
-                                                   sdpMLineIndex: index, usernameFragment: username }, size });
-        this.candidateBytes += size;
+        const item = checkedRemoteCandidate(candidate, this.candidateCount, this.candidateBytes);
+        this.pendingCandidates.push(item);
+        this.candidateBytes += item.size;
         ++this.candidateCount;
         if (this.remoteSet) await this.flushCandidates();
     }

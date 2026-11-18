@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../protocol/reliable_channel.hpp"
 #include "p2pdc/connection.h"
 #include "p2pdc/frame.h"
 #include "p2pdc/memory_budget.h"
@@ -22,6 +23,8 @@ struct NativeTransportCallbacks {
     std::function<void(RouteInfo)> on_route;
     std::function<void(ConnectError, std::string)> on_error;
     std::function<void()> on_writable;
+    // Optional; without it the transport never uses a datagram channel.
+    std::function<void(Bytes)> on_datagram = {};
 };
 
 struct NativeReceiveLimits {
@@ -62,6 +65,11 @@ class NativeTransport {
     // Remote delivery is not guaranteed by local acceptance.
     // Sends one backend message; fragmentation/backpressure budgets belong above.
     [[nodiscard]] NativeSendResult send(ByteView bytes);
+    // Call once both sides are known to support datagrams: the offerer opens the
+    // channel and the answerer starts accepting it. See datagram_support.hpp.
+    void enable_datagrams();
+    [[nodiscard]] bool datagrams_available() const;
+    [[nodiscard]] ChannelSend send_datagram(ByteView bytes);
     [[nodiscard]] std::size_t buffered_amount() const;
     // on_writable fires when the buffered amount falls to this many bytes. The
     // default 0 waits for a fully drained buffer (stop-and-wait).

@@ -6,7 +6,7 @@ API is C++20 and is shared by Linux and WebAssembly consumers. For supported
 platforms and test results, see [alpha status](ALPHA_STATUS.md).
 
 The library discovers peers and opens authenticated, reliable, ordered binary
-connections. It does not decide whom to trust or synchronize a document. The
+connections, which can also carry unreliable datagrams. It does not decide whom to trust or synchronize a document. The
 application supplies those policies, its discovery infrastructure, and any
 STUN/TURN service it needs.
 
@@ -201,6 +201,34 @@ The example fails on backpressure for simplicity. A real application should
 manage a bounded queue. `Connection::close()` suppresses callbacks not yet
 delivered; a callback already executing may finish. Poll `state()` when
 exceptional scheduler failures may have prevented a callback.
+
+## Datagrams
+
+For data where only the latest value matters, such as pointer positions, a
+connection can also send datagrams. They do not wait behind reliable messages
+and are never retransmitted, so they may be lost or arrive out of order.
+
+```cpp
+handlers.on_datagram = [](Bytes bytes) { /* newest data wins */ };
+if (connection->datagrams_available())
+    (void)connection->send_datagram(bytes);
+```
+
+A datagram holds at most `max_datagram_bytes` (1024) bytes, so that it stays
+within one network packet. They use a second data channel in the same DTLS
+session and are delivered only after the peer is authenticated. `on_datagram`
+is optional; without it, received datagrams are dropped.
+
+`send_datagram` returns `Accepted` when the datagram was handed to the network,
+`NotReady` while datagrams are unavailable, `TooLarge` above the limit, and
+`Backpressure` when too much is waiting; drop it or send newer data later, as
+`on_writable` does not report datagram capacity. Neither a failed datagram nor
+a full receive queue affects the connection.
+
+`datagrams_available()` becomes true shortly after `Ready`, once the channel
+opens. It stays false when either side sets `ConnectOptions::datagrams` to
+false or runs a version without datagram support; such peers still connect
+normally, so keep a reliable fallback for anything that must arrive.
 
 ## STUN, TURN, and route reporting
 

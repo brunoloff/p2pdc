@@ -1,11 +1,9 @@
 #include "../discovery/signal_errors.hpp"
-#include "../discovery/terminal_signal.hpp"
 #include "native_attempt_impl.hpp"
 #include "native_attempt_validation.hpp"
 #include "native_ice_config.hpp"
 
 #include <chrono>
-#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -221,6 +219,10 @@ NativeLinkCallbacks NativeAttempt::Impl::link_callbacks() {
                                      self->status != NativeAttemptState::Closed)
             self->gate->on_writable();
     };
+    out.on_datagram = [weak](Bytes value) {
+        if (auto self = weak.lock())
+            self->on_datagram(std::move(value));
+    };
     return out;
 }
 HandshakeGateCallbacks NativeAttempt::Impl::gate_callbacks() {
@@ -276,7 +278,8 @@ std::optional<StoreError> NativeAttempt::Impl::setup() {
                 self->fail(kind == SignalingKind::Reject ? ConnectError::Rejected
                                                          : ConnectError::Canceled);
             return true;
-        });
+        },
+        config.datagrams);
     return std::nullopt;
 }
 
@@ -370,20 +373,6 @@ void NativeAttempt::poll_health() {
 }
 RouteInfo NativeAttempt::poll_route() { return impl_->link->poll_route(); }
 void NativeAttempt::timeout() { impl_->fail(ConnectError::Timeout); }
-void NativeAttempt::Impl::cancel_remote() noexcept {
-    try {
-        const auto current = policy();
-        SignalingFields fields{SignalingKind::Cancel, config.binding.local.instance,
-                               config.binding.remote, config.binding.attempt,
-                               cancel_sequence,       current.now,
-                               expiry(current.now),   {}};
-        (void)publish_terminal_signal(config.store, config.remote_mailbox, *config.identity,
-                                      std::move(fields), config.binding.remote_box,
-                                      *config.capability, current);
-    } catch (const std::exception &error) {
-        std::cerr << "p2pdc: could not publish cancellation: " << error.what() << '\n';
-    }
-}
 void NativeAttempt::close() {
     if (impl_ && impl_->status != NativeAttemptState::Closed) {
         if ((impl_->started || impl_->config.accepted_offer) && !impl_->authenticated &&

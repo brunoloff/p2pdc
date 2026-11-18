@@ -25,6 +25,7 @@ struct ConnectionAttemptCallbacks {
     std::function<void()> on_writable;
     std::function<void(RouteInfo)> on_route;
     std::function<void()> on_failed;
+    std::function<void(Bytes)> on_datagram = {}; // only after on_ready; may be dropped
 };
 
 class PublicAttempt {
@@ -32,6 +33,8 @@ class PublicAttempt {
     virtual ~PublicAttempt() = default;
     [[nodiscard]] virtual ConnectionAttemptStart poll_start() = 0;
     [[nodiscard]] virtual ChannelSend send(ByteView payload) = 0;
+    [[nodiscard]] virtual ChannelSend send_datagram(ByteView payload) = 0;
+    [[nodiscard]] virtual bool datagrams_available() const = 0;
     [[nodiscard]] virtual ConnectionAttemptState state() const = 0;
     [[nodiscard]] virtual ConnectError failure_reason() const = 0;
     [[nodiscard]] virtual std::optional<std::uint32_t> max_message_size() const = 0;
@@ -44,6 +47,6 @@ class PublicAttempt {
 
 [[nodiscard]] std::variant<std::unique_ptr<PublicAttempt>, StoreError>
 make_public_attempt(const ConnectionAdmission &admission, const IncomingOffer *offer, IceConfig ice,
-                    MemoryBudget budget, std::uint32_t message_limit, Executor executor,
-                    ConnectionAttemptCallbacks callbacks);
+                    MemoryBudget budget, std::uint32_t message_limit, bool datagrams,
+                    Executor executor, ConnectionAttemptCallbacks callbacks);
 } // namespace p2pdc::detail

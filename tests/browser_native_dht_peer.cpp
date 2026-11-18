@@ -89,7 +89,9 @@ class Peer {
     std::optional<Advertisement> request_;
     SigningPublicKey expected_{};
     bool started_ = false, published_ = false, sent_ = false, received_ = false,
-         acknowledged_ = false;
+         acknowledged_ = false, datagram_received_ = false;
+    bool require_datagram_ = std::getenv("P2PDC_TEST_REQUIRE_DATAGRAM") != nullptr;
+    std::chrono::steady_clock::time_point next_datagram_{};
     std::string error_;
     std::string stop_input_;
     bool answerer_ = false;
@@ -143,6 +145,7 @@ class Peer {
     bool listen();
     bool accept();
     ConnectionHandlers handlers();
+    void send_datagram();
     void message(Bytes bytes);
     Bytes large_message() const;
     bool stop_requested();
@@ -222,9 +225,24 @@ bool Peer::connect() {
     return true;
 }
 ConnectionHandlers Peer::handlers() {
-    return {[](ConnectionState) {}, [](RouteInfo) {},
-            [this](Bytes value) { message(std::move(value)); }, [] {},
-            [this](ConnectError) { error_ = "connection failed"; }};
+    return {[](ConnectionState) {},
+            [](RouteInfo) {},
+            [this](Bytes value) { message(std::move(value)); },
+            [] {},
+            [this](ConnectError) { error_ = "connection failed"; },
+            {},
+            [this](Bytes value) {
+                if (value == Bytes{std::byte{0x44}})
+                    datagram_received_ = true;
+            }};
+}
+// Datagrams may be lost, so they are repeated for as long as the test runs.
+void Peer::send_datagram() {
+    const auto now = std::chrono::steady_clock::now();
+    if (!connection_ || !connection_->datagrams_available() || now < next_datagram_)
+        return;
+    next_datagram_ = now + 50ms;
+    (void)connection_->send_datagram(Bytes{std::byte{0x45}});
 }
 bool Peer::listen() {
     auto result = node_->listen(*lease_, *watch_, loop_.scheduler(), {},
@@ -294,7 +312,10 @@ bool Peer::run() {
                 else
                     sent_ = true;
             }
-            return (sent_ && received_ && acknowledged_) || !error_.empty();
+            send_datagram();
+            return (sent_ && received_ && acknowledged_ &&
+                    (datagram_received_ || !require_datagram_)) ||
+                   !error_.empty();
         },
         45s);
     if (!complete && error_.empty())
@@ -302,7 +323,12 @@ bool Peer::run() {
     if (!error_.empty())
         return false;
     std::cout << "PASS" << std::endl;
-    if (!loop_.until([this] { return stop_requested() || !error_.empty(); }, 45s))
+    if (!loop_.until(
+            [this] {
+                send_datagram();
+                return stop_requested() || !error_.empty();
+            },
+            45s))
         error_ = "test stop timed out";
     return error_.empty();
 }

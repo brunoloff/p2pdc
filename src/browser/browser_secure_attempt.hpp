@@ -14,6 +14,8 @@ struct BrowserSecureConfig {
     std::uint32_t max_message_bytes = 256 * 1024;
     std::function<std::uint64_t()> now;
     std::uint64_t clock_skew = 30;
+    // Offer the unreliable datagram channel (see datagram_support.hpp).
+    bool datagrams = false;
 };
 struct BrowserSecureCallbacks {
     // Must enqueue and return without reentering or destroying this attempt.
@@ -24,6 +26,7 @@ struct BrowserSecureCallbacks {
     std::function<void(RouteInfo)> on_route;
     std::function<void(BrowserTransportState)> on_transport;
     std::function<void(AttemptFailure)> on_failure;
+    std::function<void(Bytes)> on_datagram = {}; // only once authenticated
 };
 // Internal preauthorized attempt. The owner supplies verified peer bindings,
 // a nondecreasing UTC clock, and ordered executor. All callbacks are serialized,
@@ -40,6 +43,8 @@ class BrowserSecureAttempt {
     [[nodiscard]] bool start();
     [[nodiscard]] FlowResult receive(ByteView signal);
     [[nodiscard]] ChannelSend send(ByteView message);
+    [[nodiscard]] ChannelSend send_datagram(ByteView message);
+    [[nodiscard]] bool datagrams_available() const;
     [[nodiscard]] bool ready() const;
     [[nodiscard]] std::optional<std::uint32_t> max_message_size() const;
     [[nodiscard]] RouteInfo route() const;

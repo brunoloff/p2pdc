@@ -49,6 +49,7 @@ class WebRtcBridge {
             onRoute: (route) => this.route(entry, route),
             onError: (_reason, category) => this.emit(entry, 5, category === "resource" ? 1 : 0),
             onWritable: () => this.emit(entry, 6),
+            onDatagram: (value) => this.emit(entry, 10, 0, value),
         };
     }
     route(entry, route) {
@@ -88,6 +89,9 @@ class WebRtcBridge {
             () => { entry.candidates.delete(operation); this.emit(entry, 9, operation); });
     }
     send(id, bytes) { return sends.get(this.entry(id).transport.send(bytes)) ?? 4; }
+    enableDatagrams(id) { this.entry(id).transport.enableDatagrams(); }
+    datagramsAvailable(id) { return this.entry(id).transport.datagramsAvailable(); }
+    sendDatagram(id, bytes) { return sends.get(this.entry(id).transport.sendDatagram(bytes)) ?? 4; }
     buffered(id) { return this.entry(id).transport.bufferedAmount(); }
     maximum(id) { return this.entry(id).transport.maxMessageSize(); }
     poll(id) {

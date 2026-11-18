@@ -52,3 +52,18 @@ the channel marker or outer framing, using the fixed inputs in
 body and signature. The vector's synthetic identities and nonces are not for
 real connections. The outer framing and marker are described in
 [version-1 framing](FRAMING_V1.md).
+
+## Datagram channel
+
+Peers announce datagram support in their signed session descriptions: the offer
+ends with the line `a=x-p2pdc-datagrams:offer` and the answer with
+`a=x-p2pdc-datagrams:answer`. The lines are covered by the description hashes
+above. Separate values are needed because libdatachannel copies unknown offer
+attributes into its answers, so an echoed offer line must not count as support.
+
+When the answer carries its line, the offerer opens the data channel
+`p2pdc/datagram/v1`, unordered and with no retransmissions. Older versions treat
+any additional channel as a protocol error, which is why it is never opened
+without this announcement. The channel shares the connection's DTLS session, so
+it needs no handshake of its own. Its messages are the application's bytes,
+at most 1024 per message, and are ignored until the handshake has completed.

@@ -130,6 +130,35 @@ ChannelSend BrowserSecureAttempt::send(ByteView message) {
         return ChannelSend::Failed;
     return state->attempt->send(message);
 }
+// Datagrams count only once the handshake has authenticated the peer behind the
+// connection's DTLS session.
+ChannelSend BrowserSecureAttempt::send_datagram(ByteView message) {
+    auto state = impl_;
+    if (!state->active)
+        return ChannelSend::Closed;
+    if (state->failed)
+        return ChannelSend::Failed;
+    if (!state->attempt->ready())
+        return ChannelSend::NotReady;
+    switch (state->transport->send_datagram(message)) {
+    case BrowserSend::Accepted:
+        return ChannelSend::Accepted;
+    case BrowserSend::NotReady:
+        return ChannelSend::NotReady;
+    case BrowserSend::TooLarge:
+        return ChannelSend::TooLarge;
+    case BrowserSend::Backpressure:
+        return ChannelSend::Backpressure;
+    case BrowserSend::Closed:
+        return ChannelSend::Closed;
+    case BrowserSend::Failed:
+        return ChannelSend::Failed;
+    }
+    return ChannelSend::Failed;
+}
+bool BrowserSecureAttempt::datagrams_available() const {
+    return ready() && impl_->transport->datagrams_available();
+}
 bool BrowserSecureAttempt::ready() const {
     return impl_->active && !impl_->failed && impl_->attempt->ready();
 }

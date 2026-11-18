@@ -29,6 +29,8 @@ export interface BrowserTransportHandlers {
     onRoute(route: BrowserRoute): void;
     onError(reason: string, category: "transport" | "resource"): void;
     onWritable(): void;
+    /** Optional: a datagram, which may arrive out of order or not at all. */
+    onDatagram?(bytes: Uint8Array): void;
 }
 /** Raw WebRTC transport; callers must authenticate signaling and peer identity.
  * Poll route periodically: sampled statistics cannot prove TURN was never used. */
@@ -40,6 +42,11 @@ export class BrowserWebRtcTransport {
     setRemoteDescription(description: BrowserDescription): Promise<void>;
     addRemoteCandidate(candidate: RTCIceCandidateInit): Promise<void>;
     send(bytes: Uint8Array): BrowserSendResult;
+    /** Call once both sides are known to support datagrams; requires onDatagram. */
+    enableDatagrams(): void;
+    datagramsAvailable(): boolean;
+    /** Sends at most 1024 bytes without delivery or ordering guarantees. */
+    sendDatagram(bytes: Uint8Array): BrowserSendResult;
     bufferedAmount(): number | null;
     /** Zero or positive infinity means unlimited; null means the limit is unavailable. */
     maxMessageSize(): number | null;

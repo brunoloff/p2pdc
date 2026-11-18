@@ -37,6 +37,7 @@ struct NativeAttempt::Impl : HandshakeTransport, std::enable_shared_from_this<Im
     void signal_failure(bool transient, ConnectError reason = ConnectError::Signaling);
     void on_catchup(bool success);
     void on_transport(NativeTransportState value);
+    void on_datagram(Bytes value);
     [[nodiscard]] bool apply_accepted_offer();
     void activate();
     void fail(ConnectError reason = ConnectError::Backend);

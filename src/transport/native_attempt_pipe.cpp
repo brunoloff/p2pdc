@@ -1,7 +1,47 @@
 #include "../discovery/signal_errors.hpp"
+#include "../discovery/terminal_signal.hpp"
 #include "native_attempt_impl.hpp"
 
+#include <iostream>
+
 namespace p2pdc::detail {
+
+// Datagrams count only once the handshake has authenticated the peer behind the
+// connection's DTLS session; earlier ones are dropped like any lost datagram.
+void NativeAttempt::Impl::on_datagram(Bytes value) {
+    if (authenticated && status == NativeAttemptState::Ready && callbacks.on_datagram)
+        callbacks.on_datagram(std::move(value));
+}
+
+ChannelSend NativeAttempt::send_datagram(ByteView payload) {
+    if (impl_->status == NativeAttemptState::Closed)
+        return ChannelSend::Closed;
+    if (impl_->status == NativeAttemptState::Failed)
+        return ChannelSend::Failed;
+    if (impl_->status != NativeAttemptState::Ready || !impl_->authenticated)
+        return ChannelSend::NotReady;
+    return impl_->link->send_datagram(payload);
+}
+
+bool NativeAttempt::datagrams_available() const {
+    return impl_->status == NativeAttemptState::Ready && impl_->authenticated &&
+           impl_->link->datagrams_available();
+}
+
+void NativeAttempt::Impl::cancel_remote() noexcept {
+    try {
+        const auto current = policy();
+        SignalingFields fields{SignalingKind::Cancel, config.binding.local.instance,
+                               config.binding.remote, config.binding.attempt,
+                               cancel_sequence,       current.now,
+                               expiry(current.now),   {}};
+        (void)publish_terminal_signal(config.store, config.remote_mailbox, *config.identity,
+                                      std::move(fields), config.binding.remote_box,
+                                      *config.capability, current);
+    } catch (const std::exception &error) {
+        std::cerr << "p2pdc: could not publish cancellation: " << error.what() << '\n';
+    }
+}
 
 void NativeAttempt::Impl::signal_failure(bool transient, ConnectError reason) {
     if (status == NativeAttemptState::Failed || status == NativeAttemptState::Closed)

@@ -36,6 +36,7 @@ class BrowserNativePeer : public std::enable_shared_from_this<BrowserNativePeer>
     void state(ConnectionState state);
     void message(Bytes value);
     void check_exchange();
+    void send_datagram();
     void discovery_status(DiscoveryStatus status);
     void finish(bool success);
     void stopped(NodeStopResult result);
@@ -54,6 +55,8 @@ class BrowserNativePeer : public std::enable_shared_from_this<BrowserNativePeer>
     DiscoveryCapability capability_{};
     CancelTimer deadline_;
     CancelTimer settle_;
+    CancelTimer datagram_timer_;
+    bool datagram_received_ = false;
     bool published_ = false, caught_ = false, connecting_ = false, ready_ = false;
     bool sent_ = false, received_ = false, acknowledged_ = false, finishing_ = false;
     bool success_ = false, awaiting_outage_ = false, saw_reconnecting_ = false, recovered_ = false;
@@ -231,7 +234,25 @@ ConnectionHandlers BrowserNativePeer::handlers() {
                                      : self->sent_ && self->received_ && self->acknowledged_);
                 }
             },
-            {}};
+            {},
+            [weak](Bytes value) {
+                if (auto self = weak.lock(); self && value == Bytes{std::byte{0x45}}) {
+                    self->datagram_received_ = true;
+                    self->check_exchange();
+                }
+            }};
+}
+// Datagrams may be lost, so they are repeated until the test ends.
+void BrowserNativePeer::send_datagram() {
+    if (finishing_ || !connection_)
+        return;
+    if (connection_->datagrams_available())
+        (void)connection_->send_datagram(Bytes{std::byte{0x44}});
+    auto weak = weak_from_this();
+    datagram_timer_ = runtime_.scheduler()(50ms, [weak] {
+        if (auto self = weak.lock())
+            self->send_datagram();
+    });
 }
 void BrowserNativePeer::state(ConnectionState value) {
     if (value == ConnectionState::Failed) {
@@ -247,6 +268,7 @@ void BrowserNativePeer::state(ConnectionState value) {
         return;
     }
     sent_ = true;
+    send_datagram();
     check_exchange();
 }
 void BrowserNativePeer::message(Bytes value) {
@@ -267,7 +289,7 @@ void BrowserNativePeer::message(Bytes value) {
     check_exchange();
 }
 void BrowserNativePeer::check_exchange() {
-    if (ready_ && sent_ && received_ && acknowledged_ && !settle_) {
+    if (ready_ && sent_ && received_ && acknowledged_ && datagram_received_ && !settle_) {
         if (recovery_) {
             awaiting_outage_ = true;
             report_recovery_stage(1);
@@ -313,6 +335,8 @@ void BrowserNativePeer::finish(bool success) {
         deadline_();
     if (settle_)
         settle_();
+    if (datagram_timer_)
+        datagram_timer_();
     auto weak = weak_from_this();
     if (!node_->shutdown([weak](NodeStopResult result) {
             if (auto self = weak.lock())

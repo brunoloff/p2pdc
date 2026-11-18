@@ -3,6 +3,8 @@
 
 #include "../core/deferred_events.hpp"
 #include "../core/timer_producer.hpp"
+#include "connection_status.hpp"
+#include "datagram_delivery.hpp"
 #include "public_attempt.hpp"
 
 #include <algorithm>
@@ -12,15 +14,6 @@
 
 namespace p2pdc::detail {
 namespace {
-RouteInfo invalidated_route(RouteInfo route) {
-    route.current = RouteKind::Unknown;
-    route.selected_pair.reset();
-    route.observed_at.reset();
-    if (route.turn_history != TurnHistory::Used) {
-        route.turn_history = TurnHistory::Unknown;
-    }
-    return route;
-}
 class PublicConnection final : public ConnectionBackend,
                                public std::enable_shared_from_this<PublicConnection> {
   public:
@@ -38,6 +31,8 @@ class PublicConnection final : public ConnectionBackend,
     }
     [[nodiscard]] std::optional<std::uint32_t> max_message_size() const override;
     [[nodiscard]] SendStatus send(ByteView message) override;
+    [[nodiscard]] bool datagrams_available() const override;
+    [[nodiscard]] SendStatus send_datagram(ByteView message) override;
     [[nodiscard]] NativeAttempt *attempt_for_testing() const {
         return attempt_ ? attempt_->native_for_testing() : nullptr;
     }
@@ -47,8 +42,11 @@ class PublicConnection final : public ConnectionBackend,
     [[nodiscard]] ConnectionAttemptCallbacks callbacks();
     void tick();
     void update_state();
+    void notify(std::function<void(ConnectionHandlers &)> call) noexcept;
+    void notify_state(ConnectionState value) noexcept;
     void ready() noexcept;
     void message(Bytes value) noexcept;
+    void datagram(Bytes value) noexcept;
     void writable() noexcept;
     void changed_route(RouteInfo value) noexcept;
     void enqueue(std::size_t bytes, std::function<void()> callback) noexcept;
@@ -63,6 +61,7 @@ class PublicConnection final : public ConnectionBackend,
     std::function<bool()> revalidate_;
     std::unique_ptr<TimerProducer> timer_;
     std::unique_ptr<DeferredEvents> events_;
+    std::unique_ptr<DatagramDelivery> datagrams_;
     std::unique_ptr<PublicAttempt> attempt_;
     MemoryBudget budget_;
     std::chrono::steady_clock::time_point deadline_;
@@ -99,6 +98,7 @@ void PublicConnection::initialize() {
         }
     };
     timer_ = std::make_unique<TimerProducer>(backend, std::move(scheduler_));
+    datagrams_ = std::make_unique<DatagramDelivery>(delivery);
     events_ = std::make_unique<DeferredEvents>(
         std::move(delivery), MemoryBudget(options_.max_pending_bytes), options_.max_pending_events,
         options_.max_pending_bytes);
@@ -109,8 +109,9 @@ std::optional<ConnectError> PublicConnection::start(const ConnectionAdmission &a
     if (!active_ || attempt_) {
         throw std::logic_error("connection owner already started or closed");
     }
-    auto created = make_public_attempt(admission, offer, std::move(ice), budget_,
-                                       options_.max_message_bytes, executor_, callbacks());
+    auto created =
+        make_public_attempt(admission, offer, std::move(ice), budget_, options_.max_message_bytes,
+                            options_.datagrams, executor_, callbacks());
     if (auto error = std::get_if<StoreError>(&created)) {
         return connection_store_error(*error);
     }
@@ -137,6 +138,7 @@ void PublicConnection::close() {
     route_ = invalidated_route(route_);
     if (events_) {
         events_->close();
+        datagrams_->close();
     }
     cleanup();
 }
@@ -155,21 +157,19 @@ SendStatus PublicConnection::send(ByteView message) {
     if (failed_ || !attempt_ || !timer_->healthy()) {
         return SendStatus::Failed;
     }
-    switch (attempt_->send(message)) {
-    case ChannelSend::Accepted:
-        return SendStatus::Accepted;
-    case ChannelSend::NotReady:
-        return SendStatus::NotReady;
-    case ChannelSend::TooLarge:
-        return SendStatus::TooLarge;
-    case ChannelSend::Backpressure:
-        return SendStatus::Backpressure;
-    case ChannelSend::Failed:
-        return SendStatus::Failed;
-    case ChannelSend::Closed:
+    return public_send_status(attempt_->send(message));
+}
+bool PublicConnection::datagrams_available() const {
+    return active_ && !failed_ && attempt_ && attempt_->datagrams_available();
+}
+SendStatus PublicConnection::send_datagram(ByteView message) {
+    if (!active_) {
         return SendStatus::Closed;
     }
-    return SendStatus::Failed;
+    if (failed_ || !attempt_ || !timer_->healthy()) {
+        return SendStatus::Failed;
+    }
+    return public_send_status(attempt_->send_datagram(message));
 }
 void PublicConnection::invoke(const std::function<void()> &callback) {
     try {
@@ -191,21 +191,27 @@ void PublicConnection::enqueue(std::size_t bytes, std::function<void()> callback
         fail(ConnectError::ResourceLimit);
     }
 }
+void PublicConnection::notify(std::function<void(ConnectionHandlers &)> call) noexcept {
+    try {
+        enqueue(0, [weak = weak_from_this(), call = std::move(call)] {
+            if (auto self = weak.lock(); self && self->active_ && !self->failed_) {
+                self->invoke([&] { call(self->handlers_); });
+            }
+        });
+    } catch (...) {
+        fail(ConnectError::ResourceLimit);
+    }
+}
+void PublicConnection::notify_state(ConnectionState value) noexcept {
+    notify([value](ConnectionHandlers &handlers) { handlers.on_state(value); });
+}
 void PublicConnection::ready() noexcept {
     if (!active_ || failed_) {
         return;
     }
     authenticated_ = true;
     state_ = ConnectionState::Ready;
-    try {
-        enqueue(0, [weak = weak_from_this()] {
-            if (auto self = weak.lock(); self && self->active_ && !self->failed_) {
-                self->invoke([&] { self->handlers_.on_state(ConnectionState::Ready); });
-            }
-        });
-    } catch (...) {
-        fail(ConnectError::ResourceLimit);
-    }
+    notify_state(ConnectionState::Ready);
 }
 void PublicConnection::message(Bytes value) noexcept {
     try {
@@ -219,31 +225,25 @@ void PublicConnection::message(Bytes value) noexcept {
         fail(ConnectError::ResourceLimit);
     }
 }
-void PublicConnection::writable() noexcept {
-    try {
-        enqueue(0, [weak = weak_from_this()] {
-            if (auto self = weak.lock(); self && self->active_ && !self->failed_) {
-                self->invoke([&] { self->handlers_.on_writable(); });
-            }
-        });
-    } catch (...) {
-        fail(ConnectError::ResourceLimit);
+void PublicConnection::datagram(Bytes value) noexcept {
+    if (!active_ || failed_ || !handlers_.on_datagram) {
+        return;
     }
+    datagrams_->post(std::move(value), [weak = weak_from_this()](Bytes bytes) {
+        if (auto self = weak.lock(); self && self->active_ && !self->failed_) {
+            self->invoke([&] { self->handlers_.on_datagram(std::move(bytes)); });
+        }
+    });
+}
+void PublicConnection::writable() noexcept {
+    notify([](ConnectionHandlers &handlers) { handlers.on_writable(); });
 }
 void PublicConnection::changed_route(RouteInfo value) noexcept {
     if (!active_ || failed_) {
         return;
     }
     route_ = value;
-    try {
-        enqueue(0, [weak = weak_from_this(), value] {
-            if (auto self = weak.lock(); self && self->active_ && !self->failed_) {
-                self->invoke([&] { self->handlers_.on_route(value); });
-            }
-        });
-    } catch (...) {
-        fail(ConnectError::ResourceLimit);
-    }
+    notify([value](ConnectionHandlers &handlers) { handlers.on_route(value); });
 }
 void PublicConnection::fail(ConnectError error) noexcept {
     if (!active_ || failed_) {
@@ -257,6 +257,7 @@ void PublicConnection::fail(ConnectError error) noexcept {
         (void)gate_.post([self = shared_from_this(), error] {
             if (self->active_) {
                 self->events_->close();
+                self->datagrams_->close();
                 self->cleanup();
                 if (self->active_) {
                     self->handlers_.on_state(ConnectionState::Failed);
@@ -276,11 +277,7 @@ void PublicConnection::update_state() {
         fail(attempt_->failure_reason());
     } else if (current == ConnectionAttemptState::Suspended && state_ == ConnectionState::Ready) {
         state_ = ConnectionState::Suspended;
-        enqueue(0, [weak = weak_from_this()] {
-            if (auto self = weak.lock(); self && self->active_ && !self->failed_) {
-                self->invoke([&] { self->handlers_.on_state(ConnectionState::Suspended); });
-            }
-        });
+        notify_state(ConnectionState::Suspended);
     } else if (current == ConnectionAttemptState::Ready && state_ == ConnectionState::Suspended) {
         ready();
     }
@@ -363,6 +360,10 @@ ConnectionAttemptCallbacks PublicConnection::callbacks() {
                 if (auto self = weak.lock())
                     self->fail(self->attempt_ ? self->attempt_->failure_reason()
                                               : ConnectError::Backend);
+            },
+            [weak](Bytes value) {
+                if (auto self = weak.lock())
+                    self->datagram(std::move(value));
             }};
 }
 } // namespace

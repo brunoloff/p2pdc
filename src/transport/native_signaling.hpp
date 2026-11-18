@@ -19,6 +19,8 @@ struct NativeSignalBinding {
 // submit must queue bytes for later delivery, not call the remote peer inline.
 // Local descriptions and candidates must come from this exact link's callbacks;
 // the adapter cannot independently check that they originated from that link.
+// With datagrams, descriptions announce support and the link's datagram channel is
+// enabled once the peer's description does too (see datagram_support.hpp).
 // Caller supplies matching identity/box keys and enforces deadlines. A Failed
 // result requires closing the entire attempt; raw link messages are untrusted
 // until the separate signed handshake gate has succeeded.
@@ -27,7 +29,8 @@ class NativeSignaling {
     NativeSignaling(NativeSignalBinding binding, ByteView capability, NativeReliableLink &link,
                     CandidateLimits candidate_limits, MemoryBudget budget,
                     std::size_t max_candidate_bytes, std::size_t max_candidates,
-                    std::function<bool(Bytes)> submit, std::function<bool(SignalingKind)> control);
+                    std::function<bool(Bytes)> submit, std::function<bool(SignalingKind)> control,
+                    bool datagrams = false);
     NativeSignaling(const NativeSignaling &) = delete;
     NativeSignaling &operator=(const NativeSignaling &) = delete;
     [[nodiscard]] FlowResult local_description(const Identity &identity, ByteView capability,
@@ -50,6 +53,7 @@ class NativeSignaling {
     CandidateLimits limits_;
     SignalingSession session_;
     SignalingFlow flow_;
+    bool datagrams_;
     bool failed_ = false;
     bool closed_ = false;
 };

@@ -15,6 +15,7 @@ struct NativeLinkCallbacks {
     std::function<void(Bytes)> on_message;
     std::function<void(ConnectError, std::string)> on_error;
     std::function<void()> on_writable;
+    std::function<void(Bytes)> on_datagram = {}; // optional
 };
 
 // Internal, unauthenticated link. Signaling and identities must be verified by
@@ -36,6 +37,9 @@ class NativeReliableLink {
     void set_remote_description(rtc::Description description);
     void add_remote_candidate(rtc::Candidate candidate);
     [[nodiscard]] ChannelSend send(ByteView message);
+    void enable_datagrams();
+    [[nodiscard]] bool datagrams_available() const;
+    [[nodiscard]] ChannelSend send_datagram(ByteView message);
     // See ReliableChannel::set_receive_limit; kept across channel reconfiguration.
     void set_receive_limit(std::size_t bytes);
     [[nodiscard]] std::size_t writable_threshold() const;

@@ -35,6 +35,8 @@ struct NativeAttemptConfig {
     std::function<std::uint64_t()> now;
     // A responder may pin the exact offer approved by its incoming dispatcher.
     std::optional<Bytes> accepted_offer = std::nullopt;
+    // Offer the unreliable datagram channel (see datagram_support.hpp).
+    bool datagrams = false;
 };
 
 using NativeAttemptCallbacks = ConnectionAttemptCallbacks;
@@ -56,6 +58,8 @@ class NativeAttempt : public PublicAttempt {
     NativeAttempt &operator=(const NativeAttempt &) = delete;
     [[nodiscard]] NativeStart poll_start() override;
     [[nodiscard]] ChannelSend send(ByteView payload) override;
+    [[nodiscard]] ChannelSend send_datagram(ByteView payload) override;
+    [[nodiscard]] bool datagrams_available() const override;
     [[nodiscard]] NativeAttemptState state() const override;
     [[nodiscard]] ConnectError failure_reason() const override;
     [[nodiscard]] std::optional<std::uint32_t> max_message_size() const override;

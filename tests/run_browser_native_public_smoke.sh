@@ -52,10 +52,10 @@ done
 mkfifo "$test_dir/input"
 exec 3<>"$test_dir/input"
 if [[ "$role" == browser-offerer ]]; then
-    P2PDC_TEST_NATIVE_ROLE=answerer setsid "$root/build-native/p2pdc_browser_native_dht_peer" \
+    P2PDC_TEST_REQUIRE_DATAGRAM=1 P2PDC_TEST_NATIVE_ROLE=answerer setsid "$root/build-native/p2pdc_browser_native_dht_peer" \
         <"$test_dir/input" >"$test_dir/native.log" 2>&1 &
 else
-    setsid "$root/build-native/p2pdc_browser_native_dht_peer" \
+    P2PDC_TEST_REQUIRE_DATAGRAM=1 setsid "$root/build-native/p2pdc_browser_native_dht_peer" \
         <"$test_dir/input" >"$test_dir/native.log" 2>&1 &
 fi
 native_pid=$!

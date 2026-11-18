@@ -169,6 +169,13 @@ struct NativeReliableLink::Impl : ReliableSink, std::enable_shared_from_this<Imp
                 self->channel->wake();
             }
         };
+        if (callbacks.on_datagram) {
+            out.on_datagram = [weak](Bytes value) {
+                if (auto self = weak.lock(); self && !self->stopped) {
+                    self->callbacks.on_datagram(std::move(value));
+                }
+            };
+        }
     }
 
     ReliableChannelCallbacks channel_callbacks() {
@@ -236,6 +243,13 @@ void NativeReliableLink::add_remote_candidate(rtc::Candidate value) {
     impl_->transport->add_remote_candidate(std::move(value));
 }
 ChannelSend NativeReliableLink::send(ByteView message) { return impl_->channel->send(message); }
+void NativeReliableLink::enable_datagrams() { impl_->transport->enable_datagrams(); }
+bool NativeReliableLink::datagrams_available() const {
+    return impl_->transport->datagrams_available();
+}
+ChannelSend NativeReliableLink::send_datagram(ByteView message) {
+    return impl_->transport->send_datagram(message);
+}
 std::size_t NativeReliableLink::writable_threshold() const {
     return impl_->transport->writable_threshold();
 }

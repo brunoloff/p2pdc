@@ -1,5 +1,6 @@
 #include "browser_transport.hpp"
 #include "browser_ice_config.hpp"
+#include "p2pdc/connection.h"
 
 #include <emscripten.h>
 
@@ -82,6 +83,22 @@ EM_JS(int, rtc_send, (unsigned id, const std::byte *data, unsigned size), {
         return Module.p2pdcWebRtcBridge.send(id, HEAPU8.slice(data, data + size));
     } catch {
         return 4;
+    }
+});
+EM_JS(int, rtc_send_datagram, (unsigned id, const std::byte *data, unsigned size), {
+    try {
+        return Module.p2pdcWebRtcBridge.sendDatagram(id, HEAPU8.slice(data, data + size));
+    } catch {
+        return 4;
+    }
+});
+EM_JS(int, rtc_datagrams, (unsigned id, unsigned enable), {
+    try {
+        if (enable)
+            Module.p2pdcWebRtcBridge.enableDatagrams(id);
+        return Module.p2pdcWebRtcBridge.datagramsAvailable(id) ? 1 : 0;
+    } catch {
+        return 0;
     }
 });
 EM_JS(double, rtc_measure, (unsigned id, unsigned maximum), {
@@ -215,6 +232,10 @@ bool BrowserTransportImpl::event(unsigned kind, unsigned value, ByteView first, 
     case 4:
         callbacks.on_route(route(value));
         break;
+    case 10:
+        if (callbacks.on_datagram && first.size() <= max_datagram_bytes)
+            callbacks.on_datagram(Bytes(first.begin(), first.end()));
+        break;
     default:
         return control(kind, value);
     }
@@ -298,6 +319,21 @@ BrowserSend BrowserTransport::send(ByteView bytes) {
     if (bytes.size() > state_->max_message)
         return BrowserSend::TooLarge;
     const int result = rtc_send(state_->id, bytes.data(), bytes.size());
+    return result >= 0 && result <= 5 ? static_cast<BrowserSend>(result) : BrowserSend::Failed;
+}
+void BrowserTransport::enable_datagrams() {
+    if (!state_->closed && state_->callbacks.on_datagram)
+        (void)rtc_datagrams(state_->id, 1);
+}
+bool BrowserTransport::datagrams_available() const {
+    return !state_->closed && rtc_datagrams(state_->id, 0) == 1;
+}
+BrowserSend BrowserTransport::send_datagram(ByteView bytes) {
+    if (state_->closed)
+        return BrowserSend::Closed;
+    if (bytes.size() > max_datagram_bytes)
+        return BrowserSend::TooLarge;
+    const int result = rtc_send_datagram(state_->id, bytes.data(), bytes.size());
     return result >= 0 && result <= 5 ? static_cast<BrowserSend>(result) : BrowserSend::Failed;
 }
 std::optional<std::size_t> BrowserTransport::buffered_amount() const {

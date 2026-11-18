@@ -178,6 +178,17 @@ ChannelSend BrowserMailboxAttempt::send(ByteView value) {
         return ChannelSend::Failed;
     return state->secure->send(value);
 }
+ChannelSend BrowserMailboxAttempt::send_datagram(ByteView value) {
+    auto state = impl_;
+    if (!state->active)
+        return ChannelSend::Closed;
+    if (state->failed)
+        return ChannelSend::Failed;
+    return state->secure->send_datagram(value);
+}
+bool BrowserMailboxAttempt::datagrams_available() const {
+    return impl_->active && !impl_->failed && impl_->secure->datagrams_available();
+}
 bool BrowserMailboxAttempt::ready() const {
     return impl_->active && !impl_->failed && impl_->secure->ready();
 }

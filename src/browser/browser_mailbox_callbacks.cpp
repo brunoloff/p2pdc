@@ -98,6 +98,11 @@ BrowserSecureCallbacks BrowserMailboxAttemptImpl::secure_callbacks() {
             [weak](AttemptFailure reason) {
                 if (auto self = weak.lock())
                     self->fail(reason);
+            },
+            [weak](Bytes value) {
+                if (auto self = weak.lock();
+                    self && self->active && !self->failed && self->callbacks.on_datagram)
+                    self->callbacks.on_datagram(std::move(value));
             }};
 }
 } // namespace p2pdc::detail

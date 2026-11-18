@@ -16,6 +16,10 @@ std::optional<std::uint32_t> Connection::max_message_size() const {
 SendStatus Connection::send(ByteView message) {
     return state_ ? state_->send(message) : SendStatus::Closed;
 }
+bool Connection::datagrams_available() const { return state_ && state_->datagrams_available(); }
+SendStatus Connection::send_datagram(ByteView message) {
+    return state_ ? state_->send_datagram(message) : SendStatus::Closed;
+}
 void Connection::close() {
     if (state_) {
         state_->close();

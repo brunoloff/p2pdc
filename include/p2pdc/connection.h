@@ -36,6 +36,10 @@ enum class ConnectionState { Connecting, Ready, Suspended, Failed, Closed };
 enum class ConnectionStatus { SignalingUnavailable };
 enum class SendStatus { Accepted, NotReady, TooLarge, Backpressure, Failed, Closed };
 
+// Largest payload of one datagram. Datagrams stay within a single network packet, since
+// losing any fragment of a larger one would lose all of it.
+inline constexpr std::size_t max_datagram_bytes = 1024;
+
 struct ConnectOptions {
     std::chrono::milliseconds timeout{30000};
     std::chrono::milliseconds poll_interval{100};
@@ -44,6 +48,8 @@ struct ConnectOptions {
     // Local receive limit, negotiated with the peer. Must be 1 byte..4 MiB and
     // no greater than max_pending_bytes.
     std::uint32_t max_message_bytes = 256 * 1024;
+    // Offer the datagram channel. It is used only if the peer offers it too.
+    bool datagrams = true;
 };
 
 struct ConnectionHandlers {
@@ -57,6 +63,8 @@ struct ConnectionHandlers {
     // The authenticated channel remains usable; further signaling is disabled
     // for this attempt, so a later ICE restart cannot exchange new candidates.
     std::function<void(ConnectionStatus)> on_status{};
+    // Optional: a datagram from the authenticated peer. See Connection::send_datagram.
+    std::function<void(Bytes)> on_datagram{};
 };
 
 // Owner-executor only. Callbacks are deferred; close suppresses undelivered
@@ -77,6 +85,14 @@ class Connection {
     // or closure. A value does not guarantee immediate send capacity.
     [[nodiscard]] std::optional<std::uint32_t> max_message_size() const;
     [[nodiscard]] SendStatus send(ByteView message);
+    // True while datagrams can be sent: both sides support them and the channel is open.
+    // It becomes true shortly after Ready, or never with a peer lacking support.
+    [[nodiscard]] bool datagrams_available() const;
+    // Sends one message of at most max_datagram_bytes without delivery or ordering
+    // guarantees: it may be lost or arrive out of order, and
+    // is dropped when either side is busy. Accepted means only that it was handed to the
+    // network. NotReady while unavailable, Backpressure when too much is waiting.
+    [[nodiscard]] SendStatus send_datagram(ByteView message);
     void close();
 
   private:

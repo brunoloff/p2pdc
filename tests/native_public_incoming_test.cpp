@@ -362,5 +362,6 @@ namespace {
 #endif
 
 namespace {
+#include "native_public_datagram_test.hpp"
 #include "native_public_large_message_test.hpp"
 } // namespace

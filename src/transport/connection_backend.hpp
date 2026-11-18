@@ -17,6 +17,8 @@ class ConnectionBackend {
     [[nodiscard]] virtual RouteInfo route() const = 0;
     [[nodiscard]] virtual std::optional<std::uint32_t> max_message_size() const = 0;
     [[nodiscard]] virtual SendStatus send(ByteView message) = 0;
+    [[nodiscard]] virtual bool datagrams_available() const = 0;
+    [[nodiscard]] virtual SendStatus send_datagram(ByteView message) = 0;
     [[nodiscard]] virtual std::optional<ConnectError>
     start(const ConnectionAdmission &admission, IceConfig ice,
           const IncomingOffer *offer = nullptr) = 0;

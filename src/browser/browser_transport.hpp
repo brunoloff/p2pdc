@@ -27,6 +27,7 @@ struct BrowserTransportCallbacks {
     std::function<void()> on_writable;
     std::function<void(bool)> on_description_applied;
     std::function<void(std::uint32_t, bool)> on_candidate_applied;
+    std::function<void(Bytes)> on_datagram = {}; // optional
 };
 struct BrowserTransportLimits {
     std::size_t message_bytes = 262145;
@@ -50,6 +51,10 @@ class BrowserTransport {
     [[nodiscard]] bool add_remote_candidate(std::uint32_t operation, std::string_view candidate,
                                             std::string_view mid);
     [[nodiscard]] BrowserSend send(ByteView bytes);
+    // Call once both sides are known to support datagrams (see datagram_support.hpp).
+    void enable_datagrams();
+    [[nodiscard]] bool datagrams_available() const;
+    [[nodiscard]] BrowserSend send_datagram(ByteView bytes);
     [[nodiscard]] std::optional<std::size_t> buffered_amount() const;
     // Zero means no backend-advertised limit; nullopt means unavailable.
     [[nodiscard]] std::optional<std::size_t> max_message_size() const;

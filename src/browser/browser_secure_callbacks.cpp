@@ -1,3 +1,4 @@
+#include "../transport/datagram_support.hpp"
 #include "browser_secure_attempt_impl.hpp"
 
 #include <limits>
@@ -26,6 +27,11 @@ void BrowserSecureAttemptImpl::description(std::string value) {
         return;
     try {
         const auto now = time();
+        if (config.datagrams)
+            value =
+                advertise_datagrams(std::move(value), config.binding.role == HandshakeRole::Offerer
+                                                          ? datagram_offer_attribute
+                                                          : datagram_answer_attribute);
         if (attempt->local_description(bytes(value), now, now + 50, policy(now)) !=
             FlowResult::Accepted)
             fail(AttemptFailure::Signaling);
@@ -111,6 +117,11 @@ BrowserTransportCallbacks BrowserSecureAttemptImpl::transport_callbacks() {
             [weak](std::uint32_t op, bool ok) {
                 if (auto self = weak.lock(); self && self->active && !self->failed)
                     (void)self->attempt->candidate_applied(op, ok);
+            },
+            [weak](Bytes value) {
+                if (auto self = weak.lock(); self && self->active && !self->failed &&
+                                             self->attempt->ready() && self->callbacks.on_datagram)
+                    self->callbacks.on_datagram(std::move(value));
             }};
 }
 SignalingFlowCallbacks BrowserSecureAttemptImpl::signaling_callbacks() {
@@ -126,7 +137,14 @@ SignalingFlowCallbacks BrowserSecureAttemptImpl::signaling_callbacks() {
                     return false;
                 auto sdp =
                     std::string_view(reinterpret_cast<const char *>(value.data()), value.size());
-                return self->transport->set_remote_description(sdp);
+                if (!self->transport->set_remote_description(sdp))
+                    return false;
+                const auto attribute = self->config.binding.role == HandshakeRole::Offerer
+                                           ? datagram_answer_attribute
+                                           : datagram_offer_attribute;
+                if (self->config.datagrams && advertises_datagrams(sdp, attribute))
+                    self->transport->enable_datagrams();
+                return true;
             },
             [weak](CandidateView value) {
                 auto self = weak.lock();

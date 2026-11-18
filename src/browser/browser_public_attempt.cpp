@@ -1,5 +1,5 @@
-#include "../transport/public_attempt.hpp"
 #include "../core/wall_clock.hpp"
+#include "../transport/public_attempt.hpp"
 #include "browser_public_config.hpp"
 
 #include <utility>
@@ -68,6 +68,10 @@ BrowserMailboxCallbacks handlers(const std::shared_ptr<State> &state) {
                     s->current = ConnectionAttemptState::Failed;
                     s->callbacks.on_failed();
                 }
+            },
+            [weak](Bytes value) {
+                if (auto s = weak.lock(); s && s->authenticated && s->callbacks.on_datagram)
+                    s->callbacks.on_datagram(std::move(value));
             }};
 }
 class BrowserPublicAttempt final : public PublicAttempt {
@@ -75,6 +79,10 @@ class BrowserPublicAttempt final : public PublicAttempt {
     explicit BrowserPublicAttempt(std::shared_ptr<State> state) : state_(std::move(state)) {}
     ConnectionAttemptStart poll_start() override;
     ChannelSend send(ByteView value) override { return state_->attempt->send(value); }
+    ChannelSend send_datagram(ByteView value) override {
+        return state_->attempt->send_datagram(value);
+    }
+    bool datagrams_available() const override { return state_->attempt->datagrams_available(); }
     ConnectionAttemptState state() const override { return state_->current; }
     ConnectError failure_reason() const override {
         return public_failure(state_->attempt->failure_reason());
@@ -116,10 +124,11 @@ ConnectionAttemptStart BrowserPublicAttempt::poll_start() {
 
 std::variant<std::unique_ptr<PublicAttempt>, StoreError>
 make_public_attempt(const ConnectionAdmission &admission, const IncomingOffer *offer, IceConfig ice,
-                    MemoryBudget budget, std::uint32_t message_limit, Executor executor,
-                    ConnectionAttemptCallbacks callbacks) {
+                    MemoryBudget budget, std::uint32_t message_limit, bool datagrams,
+                    Executor executor, ConnectionAttemptCallbacks callbacks) {
     auto config = make_browser_public_config(admission, offer, std::move(ice), std::move(budget),
                                              message_limit, forward_utc_seconds);
+    config.secure.datagrams = datagrams;
     auto state = std::make_shared<State>();
     state->callbacks = std::move(callbacks);
     auto created =
