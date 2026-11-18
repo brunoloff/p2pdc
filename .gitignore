@@ -4,3 +4,4 @@
 /dist/
 __pycache__/
 /aqtinstall.log
+/.emsdk/

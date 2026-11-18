@@ -1,0 +1,109 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${fileDir}/build/${presetName}"
+    },
+    {
+      "name": "deps",
+      "displayName": "Dependencies for Linux",
+      "inherits": "base",
+      "sourceDir": "${fileDir}/deps",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${fileDir}/build/prefix-linux"
+      }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux library and tests",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_PREFIX_PATH": "${fileDir}/build/prefix-linux",
+        "BUILD_TESTING": "ON",
+        "P2PDC_BUILD_SHARED_TEXT": "OFF",
+        "P2PDC_TEST_OPENDHT": "ON",
+        "P2PDC_TEST_NATIVE_TRANSPORT": "ON"
+      }
+    },
+    {
+      "name": "emscripten",
+      "hidden": true,
+      "inherits": "base",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+    },
+    {
+      "name": "deps-web",
+      "displayName": "Dependencies for browsers",
+      "inherits": "emscripten",
+      "sourceDir": "${fileDir}/deps",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${fileDir}/build/prefix-web"
+      }
+    },
+    {
+      "name": "web",
+      "displayName": "Browser library",
+      "inherits": "emscripten",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "P2PDC_BUILD_SHARED_TEXT": "OFF",
+        "P2PDC_BUILD_BROWSER_SECURITY_TEST": "ON",
+        "SODIUM_INCLUDE_DIR": "${fileDir}/build/prefix-web/include",
+        "SODIUM_LIBRARY": "${fileDir}/build/prefix-web/lib/libsodium.a"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "deps", "configurePreset": "deps" },
+    { "name": "linux", "configurePreset": "linux" },
+    { "name": "deps-web", "configurePreset": "deps-web" },
+    { "name": "web", "configurePreset": "web" }
+  ],
+  "testPresets": [
+    {
+      "name": "linux",
+      "configurePreset": "linux",
+      "output": { "outputOnFailure": true },
+      "execution": { "timeout": 300 }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "deps",
+      "steps": [
+        { "type": "configure", "name": "deps" },
+        { "type": "build", "name": "deps" }
+      ]
+    },
+    {
+      "name": "linux",
+      "steps": [
+        { "type": "configure", "name": "linux" },
+        { "type": "build", "name": "linux" },
+        { "type": "test", "name": "linux" }
+      ]
+    },
+    {
+      "name": "deps-web",
+      "steps": [
+        { "type": "configure", "name": "deps-web" },
+        { "type": "build", "name": "deps-web" }
+      ]
+    },
+    {
+      "name": "web",
+      "steps": [
+        { "type": "configure", "name": "web" },
+        { "type": "build", "name": "web" }
+      ]
+    }
+  ]
+}
