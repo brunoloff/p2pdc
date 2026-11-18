@@ -15,18 +15,19 @@ they are not vendored or automatically locked by the build.
 | libsodium | 1.0.22 |
 | GLib | 2.88.3 |
 | OpenSSL | 3.6.5 |
-| Emscripten | 6.0.10-git, commit `d6c521a7f05449857c76bd99e396895583cf2083` |
+| Emscripten | 4.0.7 for builds (see `tools/install-emsdk.sh`); the original alpha browser checks used 6.0.10-git, commit `d6c521a7f05449857c76bd99e396895583cf2083` |
 | Chromium | 157.0.8103.38 |
 | Playwright Firefox | 155.0, Playwright browser revision 1543 |
 
-The [Linux build](../README.md#native-build-and-tests) instructions fetch and
-patch libnice and libdatachannel. Their checkouts, the Android OpenDHT and
+[`deps/CMakeLists.txt`](../deps/CMakeLists.txt) fetches libsodium, msgpack-cxx, OpenDHT, libnice
+and libdatachannel at these versions and applies the patches; see
+[Building p2pdc](BUILDING.md). The Android OpenDHT and
 Jami contrib checkouts, and the Android libnice and GLib clones are verified
 against the commits above (the shallow Android clones with a `test` that fails
 on a mismatch). `patches/SHA256SUMS` records the patch files; check it with
-`(cd patches && sha256sum -c SHA256SUMS)` before applying them. Host-provided
-packages (OpenDHT, msgpack-cxx, GLib and OpenSSL on Linux) are not pinned by
-the build; the table records the versions that were tested. The [WebAssembly instructions](WEBASSEMBLY_INTERNALS.md)
+`(cd patches && sha256sum -c SHA256SUMS)` before applying them. GLib, OpenSSL,
+GnuTLS and the other system packages in the build guide are not pinned; the table records
+the versions that were tested. The [WebAssembly instructions](WEBASSEMBLY_INTERNALS.md)
 pin the libsodium source archive by SHA-256. Other versions have not been
 established by these checks; the list is not a claim that older or newer
 versions necessarily fail.

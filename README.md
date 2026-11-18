@@ -153,6 +153,8 @@ default when p2pdc is the top-level project (not when embedded with
 `add_subdirectory()`) and additionally needs Qt 6 and Yrs. Use
 `-DP2PDC_BUILD_SHARED_TEXT=OFF` to build the library without those dependencies.
 
+See [Building p2pdc](docs/BUILDING.md) for a from-scratch setup on Linux and for browsers.
+
 The default native build includes the discovery and WebRTC backends. It needs a
 C++20 compiler, CMake, libsodium, OpenDHT, msgpack-cxx, and libdatachannel;
 the default OpenDHT lookup also uses pkg-config. Set `CMAKE_PREFIX_PATH` if a dependency is installed outside the
@@ -236,38 +238,8 @@ their related address redacted to `0.0.0.0:0`, and clears SDP connection
 addresses that are not relay addresses, so host and server-reflexive addresses
 are not sent to the peer through signaling.
 
-For a fresh Linux checkout, the following builds the patched dependencies
-locally. It requires GLib/GIO development files, OpenSSL, Meson, pkg-config,
-Git, Ninja, and a C/C++ toolchain:
-
-```sh
-(cd patches && sha256sum -c SHA256SUMS)
-git clone https://github.com/libnice/libnice.git .deps/libnice-tls-src
-git -C .deps/libnice-tls-src checkout af62014d520ac09c8fe1974bda1b253114c68843
-git -C .deps/libnice-tls-src apply ../../patches/libnice-v0.1.24-p2pdc-tls.patch
-meson setup .deps/libnice-tls-build .deps/libnice-tls-src \
-  --prefix "$PWD/.deps/libnice-tls-install" --libdir lib \
-  -Dcrypto-library=openssl -Dgupnp=disabled -Dgstreamer=disabled \
-  -Dintrospection=disabled -Dtests=disabled -Dexamples=disabled
-CCACHE_DISABLE=1 meson compile -C .deps/libnice-tls-build -j 1
-meson install -C .deps/libnice-tls-build --no-rebuild
-git clone https://github.com/paullouisageneau/libdatachannel.git .deps/libdatachannel
-git -C .deps/libdatachannel checkout 9e6a13abbb6846c003d817d0387b6706466e2b03
-git -C .deps/libdatachannel submodule update --init --recursive --jobs 1
-git -C .deps/libdatachannel apply ../../patches/libdatachannel-v0.23.2-p2pdc.patch
-PKG_CONFIG_PATH="$PWD/.deps/libnice-tls-install/lib/pkgconfig" \
-cmake -S .deps/libdatachannel -B .deps/build -G Ninja \
-  -DUSE_NICE=ON -DNO_MEDIA=ON -DNO_WEBSOCKET=ON -DNO_EXAMPLES=ON -DNO_TESTS=ON \
-  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/.deps/install" \
-  -DCMAKE_INSTALL_RPATH="$PWD/.deps/libnice-tls-install/lib"
-cmake --build .deps/build --parallel 1 --target datachannel
-cmake --install .deps/build
-cmake -S . -B build-native -G Ninja -DP2PDC_ENABLE_NATIVE_TRANSPORT=ON \
-  -DP2PDC_TEST_NATIVE_TRANSPORT=ON -DP2PDC_TEST_OPENDHT=ON \
-  -DLibDataChannel_DIR="$PWD/.deps/install/lib/cmake/LibDataChannel"
-cmake --build build-native --parallel 1
-ctest --test-dir build-native --parallel 1 --output-on-failure
-```
+[Building from scratch](docs/BUILDING.md) downloads, patches and builds these dependencies
+with one command.
 
 On Linux, use `nice -n 15 ionice -c 3` for builds and expensive checks, and
 avoid running them concurrently. These local dependency builds embed their
