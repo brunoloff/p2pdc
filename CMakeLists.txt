@@ -10,8 +10,13 @@ endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-# Use one shared Ninja pool for compilation and linking to avoid saturating the host.
-set_property(GLOBAL APPEND PROPERTY JOB_POOLS p2pdc_heavy=1)
+# One shared Ninja pool for compiling and linking keeps builds from saturating the host, unless
+# CMAKE_BUILD_PARALLEL_LEVEL asks for more.
+set(p2pdc_heavy_jobs 1)
+if(DEFINED ENV{CMAKE_BUILD_PARALLEL_LEVEL})
+    set(p2pdc_heavy_jobs "$ENV{CMAKE_BUILD_PARALLEL_LEVEL}")
+endif()
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS p2pdc_heavy=${p2pdc_heavy_jobs})
 set(CMAKE_JOB_POOL_COMPILE p2pdc_heavy)
 set(CMAKE_JOB_POOL_LINK p2pdc_heavy)
 include(cmake/CompilerFlags.cmake)

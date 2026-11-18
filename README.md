@@ -242,8 +242,7 @@ are not sent to the peer through signaling.
 with one command.
 
 On Linux, use `nice -n 15 ionice -c 3` for builds and expensive checks, and
-avoid running them concurrently. These local dependency builds embed their
-absolute install path; rebuild them if the checkout is moved. The patch caps the backend worker pool at four
+avoid running them concurrently. The patch caps the backend worker pool at four
 threads and changes local SCTP queue admission; it does not make local acceptance
 a guarantee of remote delivery. It also avoids a libnice 0.1.24 receive-detach
 bug that can call a null callback during connection cleanup. Rebuild and
