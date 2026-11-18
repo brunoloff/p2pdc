@@ -12,8 +12,8 @@
       "name": "deps",
       "displayName": "Dependencies for Linux",
       "inherits": "base",
-      "sourceDir": "${fileDir}/deps",
       "cacheVariables": {
+        "P2PDC_BUILD_DEPENDENCIES": "ON",
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${fileDir}/build/prefix-linux"
       }
@@ -41,8 +41,8 @@
       "name": "deps-web",
       "displayName": "Dependencies for browsers",
       "inherits": "emscripten",
-      "sourceDir": "${fileDir}/deps",
       "cacheVariables": {
+        "P2PDC_BUILD_DEPENDENCIES": "ON",
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${fileDir}/build/prefix-web"
       }

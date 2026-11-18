@@ -25,7 +25,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/prefix-linux
-          key: deps-linux-${{ runner.os }}-${{ hashFiles('deps/**', 'patches/**', 'CMakePresets.json') }}
+          key: deps-linux-${{ runner.os }}-${{ hashFiles('deps/**', 'patches/**') }}
       - name: Build dependencies
         if: steps.deps.outputs.cache-hit != 'true'
         run: cmake --workflow --preset deps
@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/prefix-web
-          key: deps-web-${{ runner.os }}-${{ hashFiles('deps/**', 'tools/install-emsdk.sh', 'CMakePresets.json') }}
+          key: deps-web-${{ runner.os }}-${{ hashFiles('deps/**', 'tools/install-emsdk.sh') }}
       - name: Build dependencies and library
         run: |
           source .emsdk/emsdk_env.sh

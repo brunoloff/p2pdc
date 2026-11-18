@@ -1,6 +1,6 @@
 # Downloads and builds the libraries p2pdc needs, at pinned versions, into
 # CMAKE_INSTALL_PREFIX. Nothing is copied into this repository. Use the "deps" and "deps-web"
-# presets, or configure this directory directly from a parent project's build.
+# presets, or configure p2pdc with -DP2PDC_BUILD_DEPENDENCIES=ON from a parent project.
 cmake_minimum_required(VERSION 3.25)
 project(p2pdc_dependencies LANGUAGES C CXX)
 
