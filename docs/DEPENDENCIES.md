@@ -47,3 +47,11 @@ remaining callers are application-facing (`DataChannel::send`, and
 `createDataChannel` when SCTP is already connected) and propagate to p2pdc,
 whose `NativeTransport::send` catches the exception and fails the transport.
 Re-check these call sites when updating libdatachannel.
+
+## libdatachannel patch: receive callbacks during teardown
+
+libnice may run a receive callback it picked up just before another thread detached it. The
+legacy `nice_agent_attach_recv` wrapper frees its callback data during that detach, which crashed
+connections closing while data arrived. The patch attaches through
+`nice_agent_attach_recv_ex` with its own guard object: the transport waits for a running callback,
+marks the guard closed, and the main loop frees it after any callback already under way.

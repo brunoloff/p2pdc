@@ -97,7 +97,7 @@ index a7ed576..1f40ead 100644
  
  std::ostream &operator<<(std::ostream &out, LogLevel level) {
 diff --git a/src/impl/icetransport.cpp b/src/impl/icetransport.cpp
-index f28422c..1a12576 100644
+index f28422c..0bcb488 100644
 --- a/src/impl/icetransport.cpp
 +++ b/src/impl/icetransport.cpp
 @@ -17,6 +17,10 @@
@@ -128,7 +128,20 @@ index f28422c..1a12576 100644
  	mStreamId = nice_agent_add_stream(mNiceAgent.get(), 1);
  	if (!mStreamId)
  		throw std::runtime_error("Failed to add a stream");
-@@ -610,6 +624,17 @@ void IceTransport::addIceServer(IceServer server) {
+@@ -589,8 +603,10 @@ IceTransport::IceTransport(const Configuration &config, candidate_callback candi
+ 	nice_agent_set_port_range(mNiceAgent.get(), mStreamId, 1, config.portRangeBegin,
+ 	                          config.portRangeEnd);
+ 
+-	nice_agent_attach_recv(mNiceAgent.get(), mStreamId, 1, g_main_loop_get_context(MainLoop->get()),
+-	                       RecvCallback, this);
++	mReceiveGuard = new ReceiveGuard{{}, this};
++	nice_agent_attach_recv_ex(mNiceAgent.get(), mStreamId, 1,
++	                          g_main_loop_get_context(MainLoop->get()), RecvCallback, mReceiveGuard,
++	                          NULL);
+ }
+ 
+ void IceTransport::setIceAttributes([[maybe_unused]] string uFrag, [[maybe_unused]] string pwd) {
+@@ -610,6 +626,17 @@ void IceTransport::addIceServer(IceServer server) {
  	if (server.port == 0)
  		server.port = server.relayType == IceServer::RelayType::TurnTls ? 5349 : 3478;
  
@@ -146,24 +159,80 @@ index f28422c..1a12576 100644
  	struct addrinfo hints = {};
  	hints.ai_family = AF_UNSPEC;
  	hints.ai_socktype =
-@@ -657,8 +682,17 @@ void IceTransport::addIceServer(IceServer server) {
+@@ -657,8 +684,23 @@ void IceTransport::addIceServer(IceServer server) {
  
  IceTransport::~IceTransport() {
  	PLOG_DEBUG << "Destroying ICE transport";
-+#if defined(NICE_VERSION_MAJOR) && \
-+    (NICE_VERSION_MAJOR > 0 || NICE_VERSION_MINOR > 1 || \
-+     (NICE_VERSION_MINOR == 1 && NICE_VERSION_MICRO >= 24))
-+	// libnice 0.1.24's legacy wrapper keeps a non-null adapter around a null
-+	// callback. Use the extended API so detachment really disables reception.
-+	nice_agent_attach_recv_ex(mNiceAgent.get(), mStreamId, 1,
-+	                          g_main_loop_get_context(MainLoop->get()), NULL, NULL, NULL);
-+#else
- 	nice_agent_attach_recv(mNiceAgent.get(), mStreamId, 1, g_main_loop_get_context(MainLoop->get()),
- 	                       NULL, NULL);
-+#endif
+-	nice_agent_attach_recv(mNiceAgent.get(), mStreamId, 1, g_main_loop_get_context(MainLoop->get()),
+-	                       NULL, NULL);
++	GMainContext *context = g_main_loop_get_context(MainLoop->get());
++	nice_agent_attach_recv_ex(mNiceAgent.get(), mStreamId, 1, context, NULL, NULL, NULL);
++	{
++		std::lock_guard lock(mReceiveGuard->mutex); // waits for a callback in progress
++		mReceiveGuard->transport = nullptr;
++	}
++	// Callbacks run on the main loop, so one already under way ends before this idle source runs.
++	GSource *release = g_idle_source_new();
++	g_source_set_callback(
++	    release,
++	    [](gpointer guard) -> gboolean {
++		    delete static_cast<ReceiveGuard *>(guard);
++		    return G_SOURCE_REMOVE;
++	    },
++	    mReceiveGuard, NULL);
++	g_source_attach(release, context);
++	g_source_unref(release);
  	nice_agent_remove_stream(mNiceAgent.get(), mStreamId);
  	mNiceAgent.reset();
  
+@@ -881,12 +923,16 @@ void IceTransport::StateChangeCallback(NiceAgent * /*agent*/, guint /*streamId*/
+ }
+ 
+ void IceTransport::RecvCallback(NiceAgent * /*agent*/, guint /*streamId*/, guint /*componentId*/,
+-                                guint len, gchar *buf, gpointer userData) {
+-	auto iceTransport = static_cast<rtc::impl::IceTransport *>(userData);
++                                guint len, gchar *buf, NiceMessageExtraData * /*extraData*/,
++                                gpointer userData) {
++	auto guard = static_cast<ReceiveGuard *>(userData);
++	std::lock_guard lock(guard->mutex);
++	if (!guard->transport)
++		return;
+ 	try {
+ 		PLOG_VERBOSE << "Incoming size=" << len;
+ 		auto b = reinterpret_cast<byte *>(buf);
+-		iceTransport->incoming(make_message(b, b + len));
++		guard->transport->incoming(make_message(b, b + len));
+ 	} catch (const std::exception &e) {
+ 		PLOG_WARNING << e.what();
+ 	}
+diff --git a/src/impl/icetransport.hpp b/src/impl/icetransport.hpp
+index 5d74aab..5d01b51 100644
+--- a/src/impl/icetransport.hpp
++++ b/src/impl/icetransport.hpp
+@@ -102,6 +102,14 @@ private:
+ 	};
+ 	static MainLoopWrapper *MainLoop;
+ 
++	// What the receive callback uses. libnice may still run a callback it picked up just before
++	// another thread detached it, so this outlives the transport until the main loop is past it.
++	struct ReceiveGuard {
++		std::recursive_mutex mutex;
++		IceTransport *transport;
++	};
++	ReceiveGuard *mReceiveGuard = nullptr;
++
+ 	unique_ptr<NiceAgent, void (*)(NiceAgent *)> mNiceAgent;
+ 	uint32_t mStreamId = 0;
+ 	guint mTimeoutId = 0;
+@@ -115,7 +123,7 @@ private:
+ 	static void StateChangeCallback(NiceAgent *agent, guint streamId, guint componentId,
+ 	                                guint state, gpointer userData);
+ 	static void RecvCallback(NiceAgent *agent, guint stream_id, guint component_id, guint len,
+-	                         gchar *buf, gpointer userData);
++	                         gchar *buf, NiceMessageExtraData *extraData, gpointer userData);
+ 	static gboolean TimeoutCallback(gpointer userData);
+ 	static void LogCallback(const gchar *log_domain, GLogLevelFlags log_level, const gchar *message,
+ 	                        gpointer user_data);
 diff --git a/src/impl/init.cpp b/src/impl/init.cpp
 index aad72dd..2e6f123 100644
 --- a/src/impl/init.cpp
