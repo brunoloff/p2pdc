@@ -37,12 +37,17 @@ if(EMSCRIPTEN)
 endif()
 
 # Every library finds the others beside it, wherever the folder ends up.
+if(APPLE)
+    set(beside_library @loader_path)
+else()
+    set(beside_library "\$ORIGIN")
+endif()
 set(cmake_arguments
     -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_INSTALL_PREFIX=${prefix}
     -DCMAKE_INSTALL_LIBDIR=lib
     -DCMAKE_PREFIX_PATH=${prefix}
-    "-DCMAKE_INSTALL_RPATH=\$ORIGIN"
+    "-DCMAKE_INSTALL_RPATH=${beside_library}"
     -DBUILD_SHARED_LIBS=ON)
 set(opendht_dependencies)
 set(opendht_patch)
