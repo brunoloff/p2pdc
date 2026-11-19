@@ -94,6 +94,15 @@ ExternalProject_Add(opendht
         -DOPENDHT_HTTP=OFF -DOPENDHT_PEER_DISCOVERY=OFF -DOPENDHT_PROXY_CLIENT=OFF
         -DOPENDHT_PROXY_SERVER=OFF -DOPENDHT_TOOLS=OFF -DOPENDHT_EXAMPLES=OFF
         -DOPENDHT_PYTHON=OFF -DOPENDHT_C=OFF -DOPENDHT_DOWNLOAD_DEPS=OFF -DOPENDHT_DOCUMENTATION=OFF)
+if(WIN32)
+    # OpenDHT names its import library and places its DLL in ways MinGW's linker and Windows'
+    # loader do not look for; add copies under the usual names.
+    ExternalProject_Add_Step(opendht windows_names DEPENDEES install
+        COMMAND ${CMAKE_COMMAND} -E copy ${prefix}/lib/libopendht_import.lib
+            ${prefix}/lib/libopendht.dll.a
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${prefix}/bin
+        COMMAND ${CMAKE_COMMAND} -E copy ${prefix}/lib/libopendht.dll ${prefix}/bin)
+endif()
 
 ExternalProject_Add(libnice
     DEPENDS ${libnice_dependencies}
