@@ -25,6 +25,7 @@ if(EMSCRIPTEN)
     # Browsers provide WebRTC themselves, so libsodium is the only library to build.
     ExternalProject_Add(libsodium
         URL "${sodium_url}" URL_HASH SHA256=${sodium_hash}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         BUILD_IN_SOURCE TRUE
         CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CFLAGS=-O1
             emconfigure <SOURCE_DIR>/configure --host=wasm32-unknown-emscripten
@@ -47,14 +48,20 @@ set(opendht_dependencies)
 set(libnice_dependencies)
 set(libdatachannel_dependencies)
 set(build_environment)
+set(configure_shell)
+if(WIN32)
+    # Ninja runs commands through cmd.exe, which cannot run shell scripts such as configure.
+    set(configure_shell sh)
+endif()
 if(APPLE)
     include("${CMAKE_CURRENT_LIST_DIR}/macos.cmake")
 endif()
 
 ExternalProject_Add(libsodium
     URL "${sodium_url}" URL_HASH SHA256=${sodium_hash}
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     BUILD_IN_SOURCE TRUE
-    CONFIGURE_COMMAND ${build_environment} <SOURCE_DIR>/configure --prefix=${prefix}
+    CONFIGURE_COMMAND ${build_environment} ${configure_shell} <SOURCE_DIR>/configure --prefix=${prefix}
         --libdir=${prefix}/lib
     BUILD_COMMAND ${build_environment} make -j ${jobs}
     INSTALL_COMMAND ${build_environment} make -j ${jobs} install)
@@ -62,6 +69,7 @@ ExternalProject_Add(libsodium
 ExternalProject_Add(msgpack_cxx
     URL "https://github.com/msgpack/msgpack-c/releases/download/cpp-8.0.0/msgpack-cxx-8.0.0.tar.gz"
     URL_HASH SHA256=4a3c0c0ac55ef4456c2d0b93c21b5d105aa3a8f21ef8fa9758550feaf989b92f
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     CMAKE_ARGS ${cmake_arguments} -DMSGPACK_USE_BOOST=OFF -DMSGPACK_BUILD_TESTS=OFF
         -DMSGPACK_BUILD_EXAMPLES=OFF -DMSGPACK_BUILD_DOCS=OFF)
 

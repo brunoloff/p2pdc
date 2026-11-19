@@ -20,6 +20,7 @@ function(p2pdc_autotools name url hash)
     cmake_parse_arguments(PARSE_ARGV 3 arg "" "" "DEPENDS;OPTIONS")
     ExternalProject_Add(${name}
         URL "${url}" URL_HASH SHA256=${hash}
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE # keeps generated build files newer than their sources
         DEPENDS ${arg_DEPENDS}
         BUILD_IN_SOURCE TRUE
         CONFIGURE_COMMAND ${macos_environment} <SOURCE_DIR>/configure --prefix=${prefix}
@@ -46,6 +47,7 @@ p2pdc_autotools(gnutls https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9
 ExternalProject_Add(argon2
     URL https://github.com/P-H-C/phc-winner-argon2/archive/refs/tags/20190702.tar.gz
     URL_HASH SHA256=daf972a89577f8772602bf2eb38b6a3dd3d922bf5724d45e7f9589b5e830442c
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     BUILD_IN_SOURCE TRUE
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${macos_environment} make -j ${jobs} PREFIX=${prefix} LIBRARY_REL=lib
@@ -56,11 +58,13 @@ ExternalProject_Add(argon2
 ExternalProject_Add(fmt
     URL https://github.com/fmtlib/fmt/releases/download/11.2.0/fmt-11.2.0.zip
     URL_HASH SHA256=203eb4e8aa0d746c62d8f903df58e0419e3751591bb53ff971096eaa0ebd4ec3
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     CMAKE_ARGS ${cmake_arguments} -DFMT_TEST=OFF -DFMT_DOC=OFF)
 
 ExternalProject_Add(openssl
     URL https://github.com/openssl/openssl/releases/download/openssl-3.5.4/openssl-3.5.4.tar.gz
     URL_HASH SHA256=967311f84955316969bdb1d8d4b983718ef42338639c621ec4c34fddef355e99
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     BUILD_IN_SOURCE TRUE
     CONFIGURE_COMMAND ${macos_environment} <SOURCE_DIR>/Configure ${openssl_target} shared
         no-tests no-docs --prefix=${prefix} --libdir=lib
@@ -71,6 +75,7 @@ ExternalProject_Add(openssl
 ExternalProject_Add(glib
     URL https://download.gnome.org/sources/glib/2.84/glib-2.84.4.tar.xz
     URL_HASH SHA256=8a9ea10943c36fc117e253f80c91e477b673525ae45762942858aef57631bb90
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     CONFIGURE_COMMAND ${macos_environment} meson setup <BINARY_DIR> <SOURCE_DIR>
         --prefix=${prefix} --libdir=lib --buildtype=release --wrap-mode=forcefallback
         --force-fallback-for=libintl,pcre2 -Dtests=false -Dintrospection=disabled -Dnls=disabled
