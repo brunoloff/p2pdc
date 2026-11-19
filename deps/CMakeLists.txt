@@ -45,6 +45,7 @@ set(cmake_arguments
     "-DCMAKE_INSTALL_RPATH=\$ORIGIN"
     -DBUILD_SHARED_LIBS=ON)
 set(opendht_dependencies)
+set(opendht_patch)
 set(libnice_dependencies)
 set(libdatachannel_dependencies)
 set(build_environment)
@@ -60,6 +61,8 @@ if(WIN32)
         CMAKE_ARGS ${cmake_arguments} -DSIMDUTF_TESTS=OFF -DSIMDUTF_TOOLS=OFF
             -DSIMDUTF_ICONV=OFF)
     set(opendht_dependencies simdutf)
+    set(opendht_patch PATCH_COMMAND ${CMAKE_COMMAND} -P
+        "${CMAKE_CURRENT_LIST_DIR}/opendht-skip-runtime-dependencies.cmake")
 endif()
 if(APPLE)
     include("${CMAKE_CURRENT_LIST_DIR}/macos.cmake")
@@ -86,10 +89,11 @@ ExternalProject_Add(opendht
     GIT_REPOSITORY https://github.com/savoirfairelinux/opendht.git
     GIT_TAG 621b44c8e807e9d3b98794f6b5f8101ad216fd8f # v4.4.1
     UPDATE_DISCONNECTED TRUE
+    ${opendht_patch}
     CMAKE_ARGS ${cmake_arguments} -DBUILD_TESTING=OFF -DOPENDHT_USE_PKGCONFIG=ON
         -DOPENDHT_HTTP=OFF -DOPENDHT_PEER_DISCOVERY=OFF -DOPENDHT_PROXY_CLIENT=OFF
         -DOPENDHT_PROXY_SERVER=OFF -DOPENDHT_TOOLS=OFF -DOPENDHT_EXAMPLES=OFF
-        -DOPENDHT_PYTHON=OFF -DOPENDHT_C=OFF -DOPENDHT_DOWNLOAD_DEPS=OFF)
+        -DOPENDHT_PYTHON=OFF -DOPENDHT_C=OFF -DOPENDHT_DOWNLOAD_DEPS=OFF -DOPENDHT_DOCUMENTATION=OFF)
 
 ExternalProject_Add(libnice
     DEPENDS ${libnice_dependencies}
