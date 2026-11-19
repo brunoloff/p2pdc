@@ -43,13 +43,21 @@ set(cmake_arguments
     -DCMAKE_PREFIX_PATH=${prefix}
     "-DCMAKE_INSTALL_RPATH=\$ORIGIN"
     -DBUILD_SHARED_LIBS=ON)
+set(opendht_dependencies)
+set(libnice_dependencies)
+set(libdatachannel_dependencies)
+set(build_environment)
+if(APPLE)
+    include("${CMAKE_CURRENT_LIST_DIR}/macos.cmake")
+endif()
 
 ExternalProject_Add(libsodium
     URL "${sodium_url}" URL_HASH SHA256=${sodium_hash}
     BUILD_IN_SOURCE TRUE
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=${prefix} --libdir=${prefix}/lib
-    BUILD_COMMAND make -j ${jobs}
-    INSTALL_COMMAND make -j ${jobs} install)
+    CONFIGURE_COMMAND ${build_environment} <SOURCE_DIR>/configure --prefix=${prefix}
+        --libdir=${prefix}/lib
+    BUILD_COMMAND ${build_environment} make -j ${jobs}
+    INSTALL_COMMAND ${build_environment} make -j ${jobs} install)
 
 ExternalProject_Add(msgpack_cxx
     URL "https://github.com/msgpack/msgpack-c/releases/download/cpp-8.0.0/msgpack-cxx-8.0.0.tar.gz"
@@ -58,7 +66,7 @@ ExternalProject_Add(msgpack_cxx
         -DMSGPACK_BUILD_EXAMPLES=OFF -DMSGPACK_BUILD_DOCS=OFF)
 
 ExternalProject_Add(opendht
-    DEPENDS msgpack_cxx
+    DEPENDS msgpack_cxx ${opendht_dependencies}
     GIT_REPOSITORY https://github.com/savoirfairelinux/opendht.git
     GIT_TAG 621b44c8e807e9d3b98794f6b5f8101ad216fd8f # v4.4.1
     UPDATE_DISCONNECTED TRUE
@@ -68,18 +76,20 @@ ExternalProject_Add(opendht
         -DOPENDHT_PYTHON=OFF -DOPENDHT_C=OFF -DOPENDHT_DOWNLOAD_DEPS=OFF)
 
 ExternalProject_Add(libnice
+    DEPENDS ${libnice_dependencies}
     GIT_REPOSITORY https://github.com/libnice/libnice.git
     GIT_TAG af62014d520ac09c8fe1974bda1b253114c68843 # 0.1.24
     UPDATE_DISCONNECTED TRUE
     PATCH_COMMAND git apply "${patches}/libnice-v0.1.24-p2pdc-tls.patch"
-    CONFIGURE_COMMAND meson setup <BINARY_DIR> <SOURCE_DIR> --prefix=${prefix} --libdir=lib
+    CONFIGURE_COMMAND ${build_environment} meson setup <BINARY_DIR> <SOURCE_DIR>
+        --prefix=${prefix} --libdir=lib
         --buildtype=release -Dcrypto-library=openssl -Dgupnp=disabled -Dgstreamer=disabled
         -Dintrospection=disabled -Dtests=disabled -Dexamples=disabled
-    BUILD_COMMAND meson compile -C <BINARY_DIR> -j ${jobs}
-    INSTALL_COMMAND meson install -C <BINARY_DIR> --no-rebuild)
+    BUILD_COMMAND ${build_environment} meson compile -C <BINARY_DIR> -j ${jobs}
+    INSTALL_COMMAND ${build_environment} meson install -C <BINARY_DIR> --no-rebuild)
 
 ExternalProject_Add(libdatachannel
-    DEPENDS libnice
+    DEPENDS libnice ${libdatachannel_dependencies}
     GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
     GIT_TAG 9e6a13abbb6846c003d817d0387b6706466e2b03 # v0.23.2
     GIT_SUBMODULES_RECURSE TRUE
