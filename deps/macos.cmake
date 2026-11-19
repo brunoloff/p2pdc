@@ -15,11 +15,12 @@ else()
     set(openssl_target darwin64-x86_64-cc)
 endif()
 
-# p2pdc_autotools(NAME URL SHA256 [DEPENDS ...] [OPTIONS ...]): configure, make, make install.
+# p2pdc_autotools(NAME URLS SHA256 [DEPENDS ...] [OPTIONS ...]): configure, make, make install.
+# URLS may list mirrors, separated by semicolons.
 function(p2pdc_autotools name url hash)
     cmake_parse_arguments(PARSE_ARGV 3 arg "" "" "DEPENDS;OPTIONS")
     ExternalProject_Add(${name}
-        URL "${url}" URL_HASH SHA256=${hash}
+        URL ${url} URL_HASH SHA256=${hash}
         DOWNLOAD_EXTRACT_TIMESTAMP TRUE # keeps generated build files newer than their sources
         DEPENDS ${arg_DEPENDS}
         BUILD_IN_SOURCE TRUE
@@ -29,7 +30,7 @@ function(p2pdc_autotools name url hash)
         INSTALL_COMMAND ${macos_environment} make install)
 endfunction()
 
-p2pdc_autotools(gmp https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+p2pdc_autotools(gmp "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz;https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz"
     a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898)
 p2pdc_autotools(nettle https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz
     fe9ff51cb1f2abb5e65a6b8c10a92da0ab5ab6eaf26e7fc2b675c45f1fb519b5

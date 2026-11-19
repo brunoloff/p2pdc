@@ -52,6 +52,14 @@ set(configure_shell)
 if(WIN32)
     # Ninja runs commands through cmd.exe, which cannot run shell scripts such as configure.
     set(configure_shell sh)
+    # MSYS2 has jsoncpp, which makes OpenDHT require simdutf; MSYS2 does not package that.
+    ExternalProject_Add(simdutf
+        URL https://github.com/simdutf/simdutf/archive/refs/tags/v8.0.0.tar.gz
+        URL_HASH SHA256=a21c34c52d91a229591e4ebc8822a876604cf2fffeac9ec065bfda7cbfb9d680
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        CMAKE_ARGS ${cmake_arguments} -DSIMDUTF_TESTS=OFF -DSIMDUTF_TOOLS=OFF
+            -DSIMDUTF_ICONV=OFF)
+    set(opendht_dependencies simdutf)
 endif()
 if(APPLE)
     include("${CMAKE_CURRENT_LIST_DIR}/macos.cmake")
