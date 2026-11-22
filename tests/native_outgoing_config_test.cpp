@@ -43,6 +43,21 @@ TEST_F(NativeOutgoingConfigTest, MapsAdmittedIdentityAndBounds) {
     EXPECT_NE(config.binding.attempt, next.binding.attempt);
 }
 
+// An application event loop may run one pass of tasks at a time with pauses between passes,
+// so a pass must send many frames, and the receiver must drain more than one pass sends.
+TEST_F(NativeOutgoingConfigTest, MovesManyFramesAPassThatTheReceiverOutpaces) {
+    Peer local(std::byte{1}), remote(std::byte{2});
+    auto admission = admission_for(local, verified_advertisement(remote), first);
+    const auto config = make_native_outgoing_config(admission, {}, MemoryBudget(4 * 1024 * 1024),
+                                                    [] { return 100; });
+    const auto &channel = config.channel_limits;
+    EXPECT_GE(channel.frames_per_pass * channel.frames.max_frame_size, 64U * 1024U);
+    EXPECT_GE(channel.backend_high_water, channel.frames_per_pass * channel.frames.max_frame_size);
+    EXPECT_LE(4 * channel.frames_per_pass, inbound_frames_per_pass);
+    EXPECT_GE(config.receive_limits.max_messages * channel.frames.max_frame_size,
+              config.receive_limits.max_bytes);
+}
+
 TEST_F(NativeOutgoingConfigTest, RejectsInvalidOrExpiredAdmission) {
     Peer local(std::byte{1}), remote(std::byte{2});
     auto admission = admission_for(local, verified_advertisement(remote), first);

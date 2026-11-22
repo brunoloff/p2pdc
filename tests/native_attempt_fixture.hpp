@@ -35,6 +35,23 @@ class Loop {
         drain();
         return done();
     }
+    // Runs like an application event loop that runs only the tasks queued before each pass and
+    // pauses between passes, as Qt's QTest::qWaitFor does. Returns the passes run until done.
+    std::size_t passes_until(const std::function<bool()> &done, std::size_t max_passes) {
+        std::size_t passes = 0;
+        while (passes < max_passes && !done()) {
+            std::deque<std::function<void()>> pass;
+            {
+                std::lock_guard lock(mutex_);
+                pass.swap(tasks_);
+            }
+            for (auto &task : pass)
+                task();
+            ++passes;
+            std::this_thread::sleep_for(10ms);
+        }
+        return passes;
+    }
 
   private:
     void drain() {

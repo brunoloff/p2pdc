@@ -27,6 +27,11 @@ struct NativeTransportCallbacks {
     std::function<void(Bytes)> on_datagram = {};
 };
 
+// Frames delivered in one executor task before the rest wait for the next. Received frames
+// that pile up past NativeReceiveLimits fail the connection, so senders must send fewer frames
+// a task than this.
+inline constexpr unsigned inbound_frames_per_pass = 256;
+
 struct NativeReceiveLimits {
     MemoryBudget budget{4U * 1024U * 1024U};
     std::size_t max_bytes = 4U * 1024U * 1024U;

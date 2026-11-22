@@ -254,7 +254,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
     }
 
     void drain() {
-        for (unsigned count = 0; count < 16; ++count) {
+        for (unsigned count = 0; count < inbound_frames_per_pass; ++count) {
             update_readiness(false);
             if (stopped || !active) {
                 return;

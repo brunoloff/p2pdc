@@ -34,6 +34,39 @@ TEST_F(NativePublicIncomingTest, ExchangesLargeFragmentedMessagesWithinConfigure
     EXPECT_EQ(sent.front(), payload);
 }
 
+// Each pass of an application event loop must move many frames: a megabyte once took more than
+// 256 passes, 4 KiB at a time.
+TEST_F(NativePublicIncomingTest, SendsALargeMessageInFewEventLoopPasses) {
+    constexpr std::uint32_t limit = 1024 * 1024;
+    setup_sides();
+    listen();
+    ConnectOptions options;
+    options.max_message_bytes = limit;
+    options.max_pending_bytes = 2 * limit;
+    connect_sender({}, options);
+    ASSERT_TRUE(advance([&] { return request.has_value() || !incoming_errors.empty(); }));
+    ASSERT_TRUE(incoming_errors.empty());
+    auto accepted = receiver.node->accept(*incoming, {}, scheduler(), options, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(accepted));
+    receiving = std::move(std::get<std::unique_ptr<Connection>>(accepted));
+    ASSERT_TRUE(advance([&] {
+        return (sending->state() == ConnectionState::Ready &&
+                receiving->state() == ConnectionState::Ready) ||
+               !connection_errors.empty();
+    }));
+    ASSERT_TRUE(connection_errors.empty());
+    Bytes payload(limit);
+    for (std::size_t i = 0; i < payload.size(); ++i)
+        payload[i] = static_cast<std::byte>(i % 251);
+    ASSERT_EQ(sending->send(payload), SendStatus::Accepted);
+    const auto passes =
+        loop.passes_until([&] { return !received.empty() || !connection_errors.empty(); }, 1000);
+    ASSERT_TRUE(connection_errors.empty()) << static_cast<int>(connection_errors.front());
+    ASSERT_EQ(received.size(), 1U);
+    EXPECT_EQ(received.front(), payload);
+    EXPECT_LE(passes, 64U);
+}
+
 TEST_F(NativePublicIncomingTest, RejectsMessageLimitBeyondBound) {
     setup_sides();
     ConnectOptions options;
