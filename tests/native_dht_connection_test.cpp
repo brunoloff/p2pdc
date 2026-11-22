@@ -158,7 +158,7 @@ struct Peer {
         ReliableChannelLimits limits{{4096, 1024}, 4096, 8, 4096, 4};
         link = std::make_unique<NativeReliableLink>(
             rtc::Configuration{}, NativeRelayPolicy::Automatic, limits, budget,
-            NativeReceiveLimits{budget, 8192, 64, 1024}, loop.executor(), link_callbacks());
+            NativeReceiveLimits{1024}, loop.executor(), link_callbacks());
         gate_transport.link = link.get();
     }
     void create_pipe(const Peer &remote) {

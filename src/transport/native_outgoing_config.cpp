@@ -13,9 +13,6 @@ constexpr std::uint32_t application_limit = 256 * 1024;
 // frames: 64 frames of 1 KiB a pass, with room in the backend for a few passes.
 constexpr std::size_t pass_frames = 64;
 constexpr std::size_t backend_bytes = 256 * 1024;
-// The receiver drains more frames a pass than the sender sends (inbound_frames_per_pass), and
-// its queue holds a megabyte of 1 KiB frames.
-constexpr std::size_t inbound_frames = 1024;
 
 } // namespace
 
@@ -35,7 +32,6 @@ NativeAttemptConfig make_native_attempt_config(const ConnectionAdmission &admiss
     const auto &remote = admission.remote;
     NativeSignalBinding binding{common.local,      common.remote,  common.local_box,
                                 common.remote_box, common.attempt, common.role};
-    NativeReceiveLimits receive{budget, 1024 * 1024, inbound_frames, 1024};
     return {NativeStore(admission.runner, {wire_limit, 128, 1024 * 1024}),
             local.fields.signaling_inbox,
             remote.fields.signaling_inbox,
@@ -47,7 +43,7 @@ NativeAttemptConfig make_native_attempt_config(const ConnectionAdmission &admiss
             budget,
             {{outbox_bytes, 128, wire_limit}, {outbox_bytes, 64, wire_limit}},
             {{application_limit + 1, 1024}, 2 * 1024 * 1024, 32, backend_bytes, pass_frames},
-            std::move(receive),
+            NativeReceiveLimits{1024},
             {4096, 256, 4361},
             65536,
             64,

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "datagram_support.hpp"
-#include "inbound_queue.hpp"
 #include "native_config.hpp"
 #include "native_datagram_channel.hpp"
 #include "native_transport.hpp"
@@ -21,7 +20,7 @@ struct TransportSubmissionGate {
 struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
     Executor executor;
     NativeTransportCallbacks callbacks;
-    InboundQueue inbound;
+    std::size_t max_message_size;
     std::shared_ptr<rtc::PeerConnection> peer;
     std::shared_ptr<rtc::DataChannel> channel;
     std::unique_ptr<NativeDatagramChannel> datagrams;
@@ -36,13 +35,14 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
     bool offered = false;
     bool remote_description_set = false;
     bool ready_notified = false;
+    bool receive_paused = false;
+    std::atomic<bool> drain_scheduled{false};
     std::uint64_t delivery_epoch = 0;
 
     Impl(rtc::Configuration config, NativeRelayPolicy relay_policy, Executor dispatch,
          NativeTransportCallbacks handlers, NativeReceiveLimits limits)
         : executor(std::move(dispatch)), callbacks(std::move(handlers)),
-          inbound(std::move(limits.budget), limits.max_bytes, limits.max_messages,
-                  limits.max_message_size),
+          max_message_size(limits.max_message_size),
           peer(std::make_shared<rtc::PeerConnection>(
               prepare_native_config(std::move(config), relay_policy))),
           policy(relay_policy) {}
@@ -79,6 +79,8 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
             if (auto self = weak.lock(); self && self->active && self->delivery_epoch == epoch) {
                 self->ready_notified = value == NativeTransportState::Ready;
                 self->callbacks.on_state(value);
+                if (self->ready_notified)
+                    self->schedule_drain(); // messages wait until the owner knows it is ready
             }
         });
     }
@@ -109,7 +111,6 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
 
     void shutdown() {
         stopped = true;
-        inbound.close();
         ++delivery_epoch;
         tracker.invalidate();
         if (datagrams)
@@ -117,6 +118,9 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
         if (channel) {
             channel->resetCallbacks();
             channel->close();
+            // The backend's reader may wait for room in a full queue; once closed it keeps no more.
+            while (channel->receive()) {
+            }
         }
         peer->resetCallbacks();
         peer->close();
@@ -161,15 +165,15 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
             backend([](Impl &self, std::string) { self.fail("DataChannel backend error"); }));
         channel->onBufferedAmountLow(
             backend([](Impl &self) { self.emit(self.callbacks.on_writable); }));
-        channel->onMessage(
-            [weak = weak_from_this(), gate = submission_gate](rtc::message_variant message) {
-                std::lock_guard lock(gate->mutex);
-                if (gate->accepts) {
-                    if (auto self = weak.lock()) {
-                        self->enqueue(std::move(message));
-                    }
+        // Messages stay in the backend until drain takes them, so a slow owner holds the peer back.
+        channel->onAvailable([weak = weak_from_this(), gate = submission_gate] {
+            std::lock_guard lock(gate->mutex);
+            if (gate->accepts) {
+                if (auto self = weak.lock()) {
+                    self->schedule_drain();
                 }
-            });
+            }
+        });
         update_readiness();
     }
 
@@ -236,54 +240,48 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
         }
     }
 
-    void enqueue(rtc::message_variant message) {
-        auto *binary = std::get_if<rtc::binary>(&message);
-        const auto result =
-            binary ? inbound.push(std::move(*binary)) : inbound.reject_invalid_type();
-        if (result.schedule_drain) {
-            schedule_drain();
-        }
-    }
-
     void schedule_drain() {
+        if (drain_scheduled.exchange(true)) {
+            return;
+        }
         executor([weak = weak_from_this()] {
             if (auto self = weak.lock(); self && self->active && !self->stopped) {
                 self->drain();
             }
         });
     }
-
+    void resume_receive() {
+        if (receive_paused && active && !stopped) {
+            receive_paused = false;
+            schedule_drain();
+        }
+    }
+    // Delivers up to inbound_frames_per_pass messages while the owner has room for them.
     void drain() {
+        drain_scheduled = false;
         for (unsigned count = 0; count < inbound_frames_per_pass; ++count) {
             update_readiness(false);
-            if (stopped || !active) {
+            if (stopped || !active || status != NativeTransportState::Ready || !ready_notified) {
+                return; // drained again by the next Ready notification
+            }
+            if (callbacks.can_receive && !callbacks.can_receive()) {
+                receive_paused = true;
                 return;
             }
-            if (status == NativeTransportState::Ready && !ready_notified) {
-                schedule_drain();
+            auto message = channel->receive();
+            if (!message) {
+                return; // onAvailable schedules the next drain
+            }
+            auto *binary = std::get_if<rtc::binary>(&*message);
+            if (!binary) {
+                fail("Text received on binary-only transport", ConnectError::Protocol);
                 return;
             }
-            auto item = inbound.next();
-            if (auto *message = std::get_if<InboundMessage>(&item)) {
-                if (status != NativeTransportState::Ready) {
-                    fail("Binary received before transport readiness", ConnectError::Protocol);
-                    return;
-                }
-                callbacks.on_binary(std::move(message->payload));
-                if (stopped || !active) {
-                    return;
-                }
-            } else {
-                const auto result = std::get<InboundStatus>(item);
-                if (result != InboundStatus::Idle && result != InboundStatus::Closed) {
-                    fail(result == InboundStatus::InvalidType
-                             ? "Text received on binary-only transport"
-                             : "Inbound message exceeds receive limits",
-                         result == InboundStatus::InvalidType ? ConnectError::Protocol
-                                                              : ConnectError::ResourceLimit);
-                }
+            if (binary->size() > max_message_size) {
+                fail("Inbound message exceeds receive limits", ConnectError::ResourceLimit);
                 return;
             }
+            callbacks.on_binary(std::move(*binary));
         }
         schedule_drain();
     }

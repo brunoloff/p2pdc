@@ -16,6 +16,7 @@ struct NativeLinkCallbacks {
     std::function<void(ConnectError, std::string)> on_error;
     std::function<void()> on_writable;
     std::function<void(Bytes)> on_datagram = {}; // optional
+    std::function<bool()> can_receive = {};      // optional; see NativeTransportCallbacks
 };
 
 // Internal, unauthenticated link. Signaling and identities must be verified by
@@ -46,6 +47,8 @@ class NativeReliableLink {
     [[nodiscard]] NativeTransportState state() const;
     [[nodiscard]] RouteInfo poll_route();
     void wake();
+    // See NativeTransport::resume_receive.
+    void resume_receive();
     void close();
 
   private:

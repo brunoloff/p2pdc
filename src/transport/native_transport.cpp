@@ -9,6 +9,9 @@ NativeTransport::NativeTransport(rtc::Configuration config, NativeRelayPolicy po
         throw std::invalid_argument(
             "Native transport requires executor and signaling/data/state/error callbacks");
     }
+    if (limits.max_message_size == 0) {
+        throw std::invalid_argument("Native transport requires a nonzero receive limit");
+    }
     impl_ = std::make_shared<Impl>(std::move(config), policy, std::move(executor),
                                    std::move(callbacks), std::move(limits));
     impl_->bind_peer();
@@ -121,6 +124,7 @@ RouteInfo NativeTransport::poll_route() {
     }
     return impl_->tracker.route();
 }
+void NativeTransport::resume_receive() { impl_->resume_receive(); }
 void NativeTransport::close() {
     {
         std::lock_guard lock(impl_->submission_gate->mutex);

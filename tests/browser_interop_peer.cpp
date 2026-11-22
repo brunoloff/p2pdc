@@ -141,7 +141,7 @@ int main() {
         Peer peer;
         MemoryBudget budget(4 * 1024 * 1024);
         const ReliableChannelLimits limits{{262145, 1024}, 2097152, 32, 4096, 4};
-        NativeReceiveLimits inbound{budget, 1048576, 128, 1024};
+        NativeReceiveLimits inbound{1024};
         peer.link = std::make_unique<NativeReliableLink>(
             rtc::Configuration{}, NativeRelayPolicy::Automatic, limits, budget, inbound,
             peer.loop.executor(), peer.callbacks());

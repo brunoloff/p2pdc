@@ -26,6 +26,8 @@ struct ConnectionAttemptCallbacks {
     std::function<void(RouteInfo)> on_route;
     std::function<void()> on_failed;
     std::function<void(Bytes)> on_datagram = {}; // only after on_ready; may be dropped
+    // Optional: whether the owner has room for one more message; see resume_receive.
+    std::function<bool()> can_receive = {};
 };
 
 class PublicAttempt {
@@ -41,6 +43,8 @@ class PublicAttempt {
     [[nodiscard]] virtual bool signaling_unavailable() const = 0;
     virtual void poll_health() = 0;
     [[nodiscard]] virtual RouteInfo poll_route() = 0;
+    // Takes received messages again after can_receive said no.
+    virtual void resume_receive() {}
     virtual void close() = 0;
     [[nodiscard]] virtual NativeAttempt *native_for_testing() { return nullptr; }
 };

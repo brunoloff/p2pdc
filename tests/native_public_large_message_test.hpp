@@ -67,6 +67,41 @@ TEST_F(NativePublicIncomingTest, SendsALargeMessageInFewEventLoopPasses) {
     EXPECT_LE(passes, 64U);
 }
 
+// The application gets one message an event-loop pass, fewer than arrive; the receiver holds the
+// rest back instead of overflowing the application's queue and failing.
+TEST_F(NativePublicIncomingTest, ManySmallMessagesSurviveAReceiverThatFallsBehind) {
+    constexpr std::size_t total = 3000;
+    setup_sides();
+    listen();
+    connect_sender();
+    ASSERT_TRUE(advance([&] { return request.has_value() || !incoming_errors.empty(); }));
+    ASSERT_TRUE(incoming_errors.empty());
+    auto accepted = receiver.node->accept(*incoming, {}, scheduler(), {}, handlers(received));
+    ASSERT_TRUE(std::holds_alternative<std::unique_ptr<Connection>>(accepted));
+    receiving = std::move(std::get<std::unique_ptr<Connection>>(accepted));
+    ASSERT_TRUE(advance([&] {
+        return (sending->state() == ConnectionState::Ready &&
+                receiving->state() == ConnectionState::Ready) ||
+               !connection_errors.empty();
+    }));
+    ASSERT_TRUE(connection_errors.empty());
+    std::size_t next = 0;
+    const auto message = [](std::size_t index) {
+        return Bytes{static_cast<std::byte>(index), static_cast<std::byte>(index >> 8)};
+    };
+    (void)loop.passes_until(
+        [&] {
+            while (next < total && sending->send(message(next)) == SendStatus::Accepted)
+                ++next;
+            return received.size() == total || !connection_errors.empty();
+        },
+        20000, 1ms);
+    ASSERT_TRUE(connection_errors.empty()) << static_cast<int>(connection_errors.front());
+    ASSERT_EQ(received.size(), total);
+    for (std::size_t index = 0; index < total; ++index)
+        ASSERT_EQ(received[index], message(index));
+}
+
 TEST_F(NativePublicIncomingTest, RejectsMessageLimitBeyondBound) {
     setup_sides();
     ConnectOptions options;

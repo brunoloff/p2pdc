@@ -261,9 +261,9 @@ void Peer::create() {
     MemoryBudget budget(4194304);
     rtc::Configuration config;
     config.maxMessageSize = 1024;
-    transport = std::make_unique<NativeTransport>(config, NativeRelayPolicy::Automatic,
-                                                  loop.executor(), transport_callbacks(),
-                                                  NativeReceiveLimits{budget, 1048576, 128, 1024});
+    transport =
+        std::make_unique<NativeTransport>(config, NativeRelayPolicy::Automatic, loop.executor(),
+                                          transport_callbacks(), NativeReceiveLimits{1024});
     attempt = std::make_unique<SecureAttempt>(
         binding, capability, borrowed(identity), box, CandidateLimits{4096, 256, 4361}, budget,
         ReliableChannelLimits{{262145, 1024}, 2097152, 32, 524288, 4}, 262144, *this,

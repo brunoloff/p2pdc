@@ -31,6 +31,9 @@ class DeferredEvents {
     [[nodiscard]] DeferredEventResult post(std::size_t payload_bytes, std::function<void()> event);
     void close();
     [[nodiscard]] std::size_t pending() const;
+    // Whether an event of payload_bytes would be accepted with a slot to spare for another,
+    // or the queue is empty and would take it.
+    [[nodiscard]] bool has_room(std::size_t payload_bytes) const;
 
   private:
     struct State;

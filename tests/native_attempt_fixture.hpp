@@ -37,7 +37,8 @@ class Loop {
     }
     // Runs like an application event loop that runs only the tasks queued before each pass and
     // pauses between passes, as Qt's QTest::qWaitFor does. Returns the passes run until done.
-    std::size_t passes_until(const std::function<bool()> &done, std::size_t max_passes) {
+    std::size_t passes_until(const std::function<bool()> &done, std::size_t max_passes,
+                             std::chrono::milliseconds pause = 10ms) {
         std::size_t passes = 0;
         while (passes < max_passes && !done()) {
             std::deque<std::function<void()>> pass;
@@ -48,7 +49,7 @@ class Loop {
             for (auto &task : pass)
                 task();
             ++passes;
-            std::this_thread::sleep_for(10ms);
+            std::this_thread::sleep_for(pause);
         }
         return passes;
     }
@@ -109,7 +110,7 @@ struct Peer {
                 budget,
                 {{524288, 128, 32768}, {524288, 64, 32768}},
                 {{4096, 1024}, 4096, 8, 4096, 4},
-                {budget, 8192, 64, 1024},
+                NativeReceiveLimits{1024},
                 {4096, 256, 4361},
                 65536,
                 64,
@@ -203,7 +204,7 @@ class NativeAttemptTest : public ::testing::Test {
                 budget,
                 {{524288, 128, 32768}, {524288, 64, 32768}},
                 {{4096, 1024}, 4096, 8, 4096, 4},
-                {budget, 8192, 64, 1024},
+                NativeReceiveLimits{1024},
                 {4096, 256, 4361},
                 65536,
                 64,

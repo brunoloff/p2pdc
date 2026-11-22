@@ -3,7 +3,6 @@
 #include "../protocol/reliable_channel.hpp"
 #include "p2pdc/connection.h"
 #include "p2pdc/frame.h"
-#include "p2pdc/memory_budget.h"
 #include "p2pdc/operation.h"
 #include "p2pdc/route.h"
 
@@ -25,17 +24,19 @@ struct NativeTransportCallbacks {
     std::function<void()> on_writable;
     // Optional; without it the transport never uses a datagram channel.
     std::function<void(Bytes)> on_datagram = {};
+    // Optional; asked before each received message is taken from the backend. While it says
+    // no, messages wait in the backend, which then stops reading and closes the SCTP window so
+    // the peer's sends back up. Call NativeTransport::resume_receive once there is room again.
+    std::function<bool()> can_receive = {};
 };
 
-// Frames delivered in one executor task before the rest wait for the next. Received frames
-// that pile up past NativeReceiveLimits fail the connection, so senders must send fewer frames
-// a task than this.
+// Frames delivered in one executor task before the rest wait for the next. A receiver that
+// drains more frames a task than its peer sends keeps up without holding the peer back.
 inline constexpr unsigned inbound_frames_per_pass = 256;
 
+// Received messages wait in the backend (at most 1024 of them) until delivered; a larger one
+// fails the connection.
 struct NativeReceiveLimits {
-    MemoryBudget budget{4U * 1024U * 1024U};
-    std::size_t max_bytes = 4U * 1024U * 1024U;
-    std::size_t max_messages = 4096;
     std::size_t max_message_size = 1024U * 1024U;
 };
 
@@ -85,6 +86,8 @@ class NativeTransport {
     // Owner must poll periodically and after observation gaps. Polling never proves
     // complete history; TurnHistory::NotUsed is deliberately never asserted here.
     [[nodiscard]] RouteInfo poll_route();
+    // Takes received messages again after can_receive said no.
+    void resume_receive();
     void close();
 
   private:

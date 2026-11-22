@@ -201,3 +201,28 @@ TEST(DeferredEvents, ShutdownDrainsSuppressedWorkBeforeFinalCallback) {
     EXPECT_TRUE(finished);
     EXPECT_EQ(calls, 0);
 }
+
+TEST(DeferredEvents, HasRoomKeepsASlotSpareAndRespectsBytes) {
+    Loop loop;
+    MemoryBudget budget(8);
+    DeferredEvents events(loop.executor(), budget, 3, 6);
+    EXPECT_TRUE(events.has_room(6));
+    EXPECT_FALSE(events.has_room(7));
+    ASSERT_EQ(events.post(2, [] {}), DeferredEventResult::Accepted);
+    EXPECT_TRUE(events.has_room(4));
+    EXPECT_FALSE(events.has_room(5)); // only 4 bytes left
+    ASSERT_EQ(events.post(0, [] {}), DeferredEventResult::Accepted);
+    EXPECT_FALSE(events.has_room(0)); // the last slot stays spare
+    loop.drain();
+    EXPECT_TRUE(events.has_room(6));
+    events.close();
+    EXPECT_FALSE(events.has_room(0));
+}
+
+TEST(DeferredEvents, HasRoomTakesOneEventWhenOnlyOneFits) {
+    Loop loop;
+    DeferredEvents events(loop.executor(), MemoryBudget(4), 1, 4);
+    EXPECT_TRUE(events.has_room(4));
+    ASSERT_EQ(events.post(4, [] {}), DeferredEventResult::Accepted);
+    EXPECT_FALSE(events.has_room(0));
+}

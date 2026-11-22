@@ -169,6 +169,7 @@ struct NativeReliableLink::Impl : ReliableSink, std::enable_shared_from_this<Imp
                 self->channel->wake();
             }
         };
+        out.can_receive = callbacks.can_receive;
         if (callbacks.on_datagram) {
             out.on_datagram = [weak](Bytes value) {
                 if (auto self = weak.lock(); self && !self->stopped) {
@@ -260,6 +261,7 @@ void NativeReliableLink::set_receive_limit(std::size_t bytes) {
 NativeTransportState NativeReliableLink::state() const { return impl_->status; }
 RouteInfo NativeReliableLink::poll_route() { return impl_->transport->poll_route(); }
 void NativeReliableLink::wake() { impl_->channel->wake(); }
+void NativeReliableLink::resume_receive() { impl_->transport->resume_receive(); }
 void NativeReliableLink::close() {
     if (impl_) {
         impl_->owner_alive = false;

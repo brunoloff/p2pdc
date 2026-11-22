@@ -70,6 +70,7 @@ class NativeAttempt : public PublicAttempt {
     void on_signaling_catchup(bool success);
     void poll_health() override;
     [[nodiscard]] RouteInfo poll_route() override;
+    void resume_receive() override;
     void timeout();
     void close() override;
     [[nodiscard]] NativeAttempt *native_for_testing() override { return this; }

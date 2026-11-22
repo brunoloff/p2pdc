@@ -116,4 +116,10 @@ void DeferredEvents::close() {
     state->close();
 }
 std::size_t DeferredEvents::pending() const { return state_->count; }
+bool DeferredEvents::has_room(std::size_t payload_bytes) const {
+    const auto &state = *state_;
+    const auto budget_free = state.budget.limit() - state.budget.used();
+    return state.active && (state.count == 0 || state.count + 1 < state.max_events) &&
+           payload_bytes <= state.max_bytes - state.bytes && payload_bytes <= budget_free;
+}
 } // namespace p2pdc::detail

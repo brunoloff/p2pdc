@@ -223,6 +223,7 @@ NativeLinkCallbacks NativeAttempt::Impl::link_callbacks() {
         if (auto self = weak.lock())
             self->on_datagram(std::move(value));
     };
+    out.can_receive = callbacks.can_receive;
     return out;
 }
 HandshakeGateCallbacks NativeAttempt::Impl::gate_callbacks() {
@@ -358,6 +359,11 @@ std::optional<std::uint32_t> NativeAttempt::max_message_size() const {
     if (impl_->status == NativeAttemptState::Failed || impl_->status == NativeAttemptState::Closed)
         return std::nullopt;
     return impl_->message_limit;
+}
+void NativeAttempt::resume_receive() {
+    if (impl_->link && impl_->status != NativeAttemptState::Closed &&
+        impl_->status != NativeAttemptState::Failed)
+        impl_->link->resume_receive();
 }
 void NativeAttempt::poll_health() {
     if (!impl_->started || impl_->status == NativeAttemptState::Closed ||

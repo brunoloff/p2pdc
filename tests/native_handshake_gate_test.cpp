@@ -278,8 +278,7 @@ struct Pair {
             MemoryBudget budget(64U * 1024U);
             return std::make_unique<NativeReliableLink>(
                 rtc::Configuration{}, NativeRelayPolicy::Automatic, limits, budget,
-                NativeReceiveLimits{budget, 8192, 64, 1024}, loop.executor(),
-                link_callbacks(first));
+                NativeReceiveLimits{1024}, loop.executor(), link_callbacks(first));
         };
         left = make(true);
         right = make(false);

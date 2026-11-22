@@ -99,7 +99,7 @@ struct Pair {
             const ReliableChannelLimits limits{
                 {256U * 1024U, first ? 1024 : second_frame_maximum}, 256U * 1024U, 4, 65536, 8};
             MemoryBudget budget(4U * 1024U * 1024U);
-            NativeReceiveLimits inbound{budget, 2U * 1024U * 1024U, 4096, 1024};
+            NativeReceiveLimits inbound{1024};
             rtc::Configuration config;
             if (channel_maximum > 0) {
                 config.maxMessageSize = channel_maximum;
@@ -156,7 +156,7 @@ struct RawPeerPair {
     void create(std::size_t frame_maximum = 1024) {
         MemoryBudget budget(4U * 1024U * 1024U);
         const ReliableChannelLimits limits{{4096, frame_maximum}, 4096, 4, 4096, 4};
-        NativeReceiveLimits inbound{budget, 8192, 64, 4096};
+        NativeReceiveLimits inbound{4096};
         raw = std::make_unique<NativeTransport>(rtc::Configuration{}, NativeRelayPolicy::Automatic,
                                                 loop.executor(), raw_callbacks());
         link = std::make_unique<NativeReliableLink>(rtc::Configuration{},
@@ -271,7 +271,7 @@ TEST(NativeReliableLink, RejectsIncompatibleLimitsAndMissingCallbacks) {
     Pair pair;
     const ReliableChannelLimits limits{{100, 64}, 100, 2, 64, 1};
     MemoryBudget budget(1024);
-    NativeReceiveLimits inbound{budget, 100, 4, 32};
+    NativeReceiveLimits inbound{32};
     EXPECT_THROW((NativeReliableLink{{},
                                      NativeRelayPolicy::Automatic,
                                      limits,

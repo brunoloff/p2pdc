@@ -171,6 +171,7 @@ SendStatus PublicConnection::send_datagram(ByteView message) {
     }
     return public_send_status(attempt_->send_datagram(message));
 }
+// Each delivered event frees room, so held-back messages are taken again.
 void PublicConnection::invoke(const std::function<void()> &callback) {
     try {
         callback();
@@ -178,6 +179,8 @@ void PublicConnection::invoke(const std::function<void()> &callback) {
         fail(ConnectError::Callback);
         throw;
     }
+    if (active_ && !failed_ && attempt_)
+        attempt_->resume_receive();
 }
 void PublicConnection::enqueue(std::size_t bytes, std::function<void()> callback) noexcept {
     if (!active_ || failed_) {
@@ -364,6 +367,10 @@ ConnectionAttemptCallbacks PublicConnection::callbacks() {
             [weak](Bytes value) {
                 if (auto self = weak.lock())
                     self->datagram(std::move(value));
+            },
+            [weak] {
+                auto self = weak.lock();
+                return self && self->events_->has_room(self->options_.max_message_bytes);
             }};
 }
 } // namespace
