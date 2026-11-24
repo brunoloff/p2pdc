@@ -245,8 +245,8 @@ void PublicConnection::changed_route(RouteInfo value) noexcept {
     if (!active_ || failed_) {
         return;
     }
-    route_ = value;
-    notify([value](ConnectionHandlers &handlers) { handlers.on_route(value); });
+    if (update_route(route_, value))
+        notify([value](ConnectionHandlers &handlers) { handlers.on_route(value); });
 }
 void PublicConnection::fail(ConnectError error) noexcept {
     if (!active_ || failed_) {

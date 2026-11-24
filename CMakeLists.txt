@@ -52,6 +52,7 @@ add_library(p2pdc
     src/core/timer_producer.cpp
     src/core/memory_budget.cpp src/core/ice_config_validation.cpp
     src/core/route.cpp
+    src/core/round_trip.cpp
     src/core/wall_clock.cpp
     src/discovery/incoming.cpp
     src/discovery/native_mailbox.cpp src/discovery/recovering_mailbox.cpp
@@ -298,7 +299,7 @@ if(BUILD_TESTING)
         tests/rate_window_test.cpp
         tests/join_retry_test.cpp
         tests/operation_test.cpp
-        tests/route_test.cpp
+        tests/route_test.cpp tests/round_trip_test.cpp
         tests/browser_ice_config_test.cpp
         tests/record_store_smoke.cpp
         tests/record_store_test.cpp

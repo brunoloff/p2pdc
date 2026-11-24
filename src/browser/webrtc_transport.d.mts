@@ -5,6 +5,8 @@ export interface BrowserRoute {
     current: "unknown" | "direct" | "turnRelayed";
     turnHistory: "unknown" | "used";
     selectedPair: { local: BrowserCandidateKind; remote: BrowserCandidateKind } | null;
+    // Round-trip time of the selected pair in milliseconds; null until the browser reports one.
+    roundTripMs: number | null;
 }
 export interface BrowserDescription {
     type: "offer" | "answer";

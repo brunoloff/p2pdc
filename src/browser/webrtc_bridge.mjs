@@ -7,6 +7,9 @@ const sends = new Map([["accepted", 0], ["notReady", 1], ["tooLarge", 2],
 const candidates = new Map([["unknown", 0], ["host", 1], ["serverReflexive", 2],
                             ["peerReflexive", 3], ["relayed", 4]]);
 const routes = new Map([["unknown", 0], ["direct", 1], ["turnRelayed", 2]]);
+// A round-trip sample for browser_transport.cpp: bit 12 marks it, bits 13-28 hold milliseconds.
+const roundTripBits = (ms) => (typeof ms === "number" && Number.isFinite(ms) && ms >= 0
+    ? (1 << 12) | (Math.min(Math.round(ms), 0xffff) << 13) : 0);
 
 // Owns only the browser transport. C++ owns authentication, signaling and callbacks.
 class WebRtcBridge {
@@ -56,7 +59,7 @@ class WebRtcBridge {
         const local = candidates.get(route.selectedPair?.local) ?? 0;
         const remote = candidates.get(route.selectedPair?.remote) ?? 0;
         const value = (routes.get(route.current) ?? 0) | ((route.turnHistory === "used" ? 1 : 0) << 2) |
-            (route.selectedPair ? 1 << 3 : 0) | (local << 4) | (remote << 8);
+            (route.selectedPair ? 1 << 3 : 0) | (local << 4) | (remote << 8) | roundTripBits(route.roundTripMs);
         return this.emit(entry, 4, value);
     }
     open(id) {
