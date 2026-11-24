@@ -1,5 +1,6 @@
 #include "browser_transport.hpp"
 #include "browser_ice_config.hpp"
+#include "../core/round_trip.hpp"
 #include "p2pdc/connection.h"
 
 #include <emscripten.h>
@@ -137,6 +138,7 @@ struct BrowserTransportImpl {
     unsigned id = 0;
     std::size_t max_message = 0;
     BrowserTransportCallbacks callbacks;
+    RoundTripSmoother round_trip;
     bool closed = false;
     bool event(unsigned kind, unsigned value, ByteView first, ByteView second);
     bool reject_event();
@@ -176,8 +178,15 @@ CandidateKind candidate_kind(unsigned value) {
         return CandidateKind::Unknown;
     }
 }
-RouteInfo route(unsigned value) {
+// webrtc_bridge.mjs packs a route into value: bits 0-1 the kind, 2 TURN used, 3 a selected
+// pair, 4-7 and 8-11 its candidate kinds, 12 a round-trip sample, 13-28 that sample in ms.
+RouteInfo route(unsigned value, RoundTripSmoother &round_trip) {
     RouteInfo info;
+    if ((value & 8U) == 0U)
+        round_trip.reset();
+    else if ((value & (1U << 12U)) != 0U && round_trip.due(std::chrono::steady_clock::now()))
+        (void)round_trip.sample(std::chrono::milliseconds{(value >> 13U) & 0xFFFFU});
+    info.round_trip_time = round_trip.value();
     const auto kind = value & 3U;
     if (kind == 1)
         info.current = RouteKind::Direct;
@@ -230,7 +239,7 @@ bool BrowserTransportImpl::event(unsigned kind, unsigned value, ByteView first, 
         callbacks.on_binary(Bytes(first.begin(), first.end()));
         break;
     case 4:
-        callbacks.on_route(route(value));
+        callbacks.on_route(route(value, round_trip));
         break;
     case 10:
         if (callbacks.on_datagram && first.size() <= max_datagram_bytes)

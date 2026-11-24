@@ -1,14 +1,14 @@
 import { BrowserDatagramChannel } from "./webrtc_datagrams.mjs";
 import { checkedLocalCandidate, checkedRemoteCandidate } from "./webrtc_candidates.mjs";
 import { relayFilteredCandidate, relayFilteredDescription } from "./webrtc_relay_filter.mjs";
-import { routeKind, selectedPair } from "./webrtc_route.mjs";
+import { RoundTripPoller, routeKind, selectedPair, selectedRoundTripMs } from "./webrtc_route.mjs";
 import { settings } from "./webrtc_settings.mjs";
 import { observeWithDeadline, recoverExpiredRequest } from "./webrtc_stats.mjs";
 
 const label = "p2pdc/reliable/v1";
 const maxSignalBytes = 32768;
 const routeRetryMs = 250;
-const emptyRoute = (used) => ({ current: "unknown", turnHistory: used ? "used" : "unknown", selectedPair: null });
+const emptyRoute = (used) => ({ current: "unknown", turnHistory: used ? "used" : "unknown", selectedPair: null, roundTripMs: null });
 // Raw transport only: signaling and peer authentication must be supplied by
 // the caller. All methods and callbacks run on one browser event loop.
 export class BrowserWebRtcTransport {
@@ -45,6 +45,7 @@ export class BrowserWebRtcTransport {
         this.readyNotified = false;
         this.statsFlight = null;
         this.statsTimer = null;
+        this.roundTrip = new RoundTripPoller(() => { if (!this.closed && this.status !== "failed" && this.connected()) void this.pollRoute(); });
         this.cancelStatsDeadline = null;
         this.turnUsed = false;
         this.route = emptyRoute(false);
@@ -194,6 +195,7 @@ export class BrowserWebRtcTransport {
         this.emit("onRoute", this.route);
     }
     cancelRouteRetry() {
+        this.roundTrip.stop();
         if (this.statsTimer !== null) clearTimeout(this.statsTimer);
         this.statsTimer = null;
     }
@@ -257,10 +259,10 @@ export class BrowserWebRtcTransport {
         let pair;
         try { pair = selectedPair(report); }
         catch { pair = null; }
-        if (pair) this.cancelRouteRetry(); else this.retryRoute();
-        const kind = routeKind(pair);
+        if (pair) { this.cancelRouteRetry(); this.roundTrip.schedule(); } else this.retryRoute();
+        const kind = routeKind(pair), roundTripMs = pair ? selectedRoundTripMs(report) : null;
         if (kind === "turnRelayed") this.turnUsed = true;
-        this.route = { current: kind, turnHistory: this.turnUsed ? "used" : "unknown", selectedPair: pair };
+        this.route = { current: kind, turnHistory: this.turnUsed ? "used" : "unknown", selectedPair: pair, roundTripMs };
         this.emit("onRoute", this.route);
         if (this.relayPolicy === "requireLocalRelay" && !pair && this.status === "ready") {
             this.status = "suspended"; this.emitState(this.status);

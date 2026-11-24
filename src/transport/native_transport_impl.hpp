@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/round_trip.hpp"
 #include "datagram_support.hpp"
 #include "native_config.hpp"
 #include "native_datagram_channel.hpp"
@@ -27,6 +28,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
     NativeRelayPolicy policy;
     NativeTransportState status = NativeTransportState::Connecting;
     RouteTracker tracker;
+    RoundTripSmoother round_trip;
     std::atomic<bool> active{true};
     std::shared_ptr<TransportSubmissionGate> submission_gate =
         std::make_shared<TransportSubmissionGate>();
@@ -113,6 +115,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
         stopped = true;
         ++delivery_epoch;
         tracker.invalidate();
+        round_trip.reset();
         if (datagrams)
             datagrams->close();
         if (channel) {
@@ -134,7 +137,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
         shutdown();
         emit(callbacks.on_error, category, std::move(reason));
         emit_state(status);
-        emit(callbacks.on_route, tracker.route());
+        emit(callbacks.on_route, current_route());
     }
 
     void attach_datagrams(std::shared_ptr<rtc::DataChannel> incoming) {
@@ -184,7 +187,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
             status = NativeTransportState::Closed;
             shutdown();
             emit_state(status);
-            emit(callbacks.on_route, tracker.route());
+            emit(callbacks.on_route, current_route());
         } else {
             update_readiness();
         }
@@ -197,6 +200,23 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
                 ice == rtc::PeerConnection::IceState::Completed);
     }
 
+    // The SCTP association's round-trip estimate, sampled every few seconds while a path is up.
+    void sample_round_trip(bool usable) {
+        if (!usable) {
+            round_trip.reset();
+        } else if (round_trip.due(std::chrono::steady_clock::now())) {
+            if (const auto rtt = peer->rtt()) {
+                (void)round_trip.sample(*rtt);
+            }
+        }
+    }
+
+    RouteInfo current_route() const {
+        auto route = tracker.route();
+        route.round_trip_time = round_trip.value();
+        return route;
+    }
+
     bool observe_route(bool notify_route) {
         rtc::Candidate local, remote;
         const bool is_connected = connected();
@@ -206,8 +226,9 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
                                        : std::nullopt;
         const auto pair = usable_route_pair(is_connected, channel && channel->isOpen(), observed);
         tracker.observe(pair, false, std::chrono::steady_clock::now());
+        sample_round_trip(pair.has_value());
         if (notify_route) {
-            emit(callbacks.on_route, tracker.route());
+            emit(callbacks.on_route, current_route());
         }
         if (is_connected && channel && channel->isOpen() &&
             policy == NativeRelayPolicy::RequireLocalRelay &&
@@ -236,7 +257,7 @@ struct NativeTransport::Impl : std::enable_shared_from_this<Impl> {
             ready_notified = false;
             ++delivery_epoch;
             emit_state(status);
-            emit(callbacks.on_route, tracker.route());
+            emit(callbacks.on_route, current_route());
         }
     }
 

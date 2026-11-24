@@ -256,6 +256,19 @@ selected candidate information when available and observed TURN history.
 visibility of the selected route, particularly with peer-reflexive candidates.
 The route can change or become unknown during a connection.
 
+`RouteInfo::round_trip_time`, also returned by `Connection::round_trip_time()`,
+is the smoothed round-trip time of the selected path, as WebRTC measures it:
+the SCTP association's estimate natively (libdatachannel `rtt()`), and the
+selected candidate pair's `currentRoundTripTime` from `getStats()` in browsers.
+It is sampled about every two seconds and smoothed with a gain of 1/4, so it
+follows changes within ten seconds or so. It is empty until the first sample
+and whenever no path is selected (suspended, failed or closed), and it can stay
+empty where a browser does not report the statistic. It needs no extra traffic.
+`on_route` fires when the route changes, the round-trip time included (so at
+most every two seconds for it), not on every observation; `route()` always
+returns the latest observation.
+Treat it as a hint for choosing peers, not as a precise measurement.
+
 ## Limits, errors, and security boundaries
 
 Error enums distinguish admission, signaling, authentication/protocol,

@@ -52,6 +52,7 @@ void BrowserSecureAttemptImpl::fail(AttemptFailure reason) {
     observed_route.current = RouteKind::Unknown;
     observed_route.selected_pair.reset();
     observed_route.observed_at.reset();
+    observed_route.round_trip_time.reset();
     if (transport)
         transport->close();
     if (attempt)
@@ -66,6 +67,7 @@ void BrowserSecureAttemptImpl::close() {
     observed_route.current = RouteKind::Unknown;
     observed_route.selected_pair.reset();
     observed_route.observed_at.reset();
+    observed_route.round_trip_time.reset();
     if (transport)
         transport->close();
     if (attempt)
