@@ -86,7 +86,8 @@ else()
         src/browser/opendht_proxy.mjs src/browser/failover_proxy.mjs
         src/browser/websocket_channel.mjs src/browser/schnorr.mjs src/browser/nostr_relay.mjs
         src/browser/mqtt_codec.mjs src/browser/mqtt_broker.mjs
-        src/browser/peerjs_socket.mjs src/browser/peerjs_host.mjs src/browser/peerjs_switchboard.mjs
+        src/browser/peerjs_socket.mjs src/browser/peerjs_link.mjs src/browser/peerjs_endpoint.mjs
+        src/browser/peerjs_host.mjs src/browser/peerjs_switchboard.mjs
         src/browser/fan_out_store.mjs src/browser/discovery_backends.mjs
         src/browser/polling_proxy_watch.mjs src/browser/fallback_proxy_watch.mjs
         src/browser/shared_proxy_watch.mjs src/browser/record_store_bridge.mjs

@@ -1,14 +1,26 @@
 // A PeerJS server for tests, following peers/peerjs-server: clients register an ID with a key
 // and token, the server sets each message's sender, queues messages for an absent ID and, when
-// it does not come within expireMs, tells the sender with EXPIRE.
+// it does not come within expireMs, tells the sender with EXPIRE. Like the public
+// 0.peerjs.com it relays only messages shaped as PeerJS WebRTC signalling (strict) and drops
+// the rest, counting them in dropped.
 import { startWebSocketServer } from "./websocket_server.mjs";
 
 const forwarded = ["OFFER", "ANSWER", "CANDIDATE", "LEAVE", "EXPIRE"];
+const description = (sdp, type) => sdp?.type === type && typeof sdp.sdp === "string";
+function genuine(message) {
+    const payload = message.payload;
+    if (!payload || !["data", "media"].includes(payload.type) || typeof payload.connectionId !== "string") return false;
+    if (message.type === "OFFER") return description(payload.sdp, "offer");
+    if (message.type === "ANSWER") return description(payload.sdp, "answer");
+    if (message.type === "CANDIDATE") return typeof payload.candidate?.candidate === "string";
+    return true;
+}
 
-export async function startPeerJsServer({ key = "peerjs", expireMs = 300 } = {}) {
+// delayAnswersMs holds ANSWERs back, so that candidates overtake them.
+export async function startPeerJsServer({ key = "peerjs", expireMs = 300, strict = true, delayAnswersMs = 0 } = {}) {
     const clients = new Map(); // id -> { connection, token }
     const queued = new Map(); // dst -> [{ message, timer }]
-    const peerjs = { clients, messages: 0, expired: 0 };
+    const peerjs = { clients, messages: 0, expired: 0, dropped: 0, types: new Map() };
     function deliver(message) {
         const client = clients.get(message.dst);
         if (client) { client.connection.send(JSON.stringify(message)); return; }
@@ -40,9 +52,12 @@ export async function startPeerJsServer({ key = "peerjs", expireMs = 300 } = {})
         connection.onMessage = (text) => {
             const message = JSON.parse(text);
             message.src = id;
-            if (!forwarded.includes(message.type)) return;
+            if (message.type === "HEARTBEAT") return;
+            if (!forwarded.includes(message.type) || (strict && !genuine(message))) { ++peerjs.dropped; return; }
             ++peerjs.messages;
-            deliver(message);
+            peerjs.types.set(message.type, (peerjs.types.get(message.type) ?? 0) + 1);
+            if (message.type === "ANSWER" && delayAnswersMs) setTimeout(() => deliver(message), delayAnswersMs);
+            else deliver(message);
         };
         connection.onClose = () => { if (clients.get(id) === client) clients.delete(id); };
     }
