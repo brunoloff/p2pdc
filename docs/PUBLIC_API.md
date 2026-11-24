@@ -1,6 +1,6 @@
 # Public C++ API guide
 
-This guide describes the experimental `0.2.0` API. Names, behavior,
+This guide describes the experimental `0.3.0` API. Names, behavior,
 and wire formats may change. Pin the same library revision on all peers. The
 API is C++20 and is shared by Linux and WebAssembly consumers. For supported
 platforms and test results, see [alpha status](ALPHA_STATUS.md).

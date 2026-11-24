@@ -1,35 +1,39 @@
-# 0.2.0
+# 0.3.0
 
 p2pdc discovers peers through OpenDHT and opens authenticated, reliable,
 ordered binary WebRTC connections, with one C++20 API for native programs and
-browser WebAssembly. This is the first release of the public source, under the
-MIT License; dependencies keep their own licenses.
+browser WebAssembly, under the MIT License.
 
-## Changes since 0.1.0-alpha.1
+## Changes since 0.2.0
 
-- **Faster reliable sends.** The reliable channel moves 64 frames per executor
-  task instead of 4. Applications whose event loop runs one pass of tasks at a
-  time were capped near 4 KiB per pass; PeerChalk's PDF transfers in its tests
-  took a third of the time.
-- **Receivers that fall behind hold the sender back.** A receiver now takes
-  messages from the transport only while the application's event queue has
-  room, so SCTP flow control slows the peer instead of the connection failing.
-- **Unreliable datagrams** on connections, for data where the newest value wins.
-- **Persistent incoming listener**, and a shared-text example.
-- **Security audit fixes**, recorded in the audit notes, including domain-
-  separated application signatures, per-lease identities, relay-only candidate
-  filtering and bounded DHT and proxy record handling.
-- **Builds from pinned sources** for every dependency, with CI for Linux and
-  WebAssembly. macOS 13 or later and Windows (MinGW) builds are tested through
-  PeerChalk's release builds.
-- A crash when a connection closed during receive is fixed.
+- **Browsers find peers through more kinds of servers.** Besides OpenDHT
+  proxies, a browser node can now meet peers through Nostr relays, MQTT 5
+  brokers and PeerJS servers, all over WebSocket. Networks that block the DHT
+  or streaming HTTP often still allow these.
+- **Several meeting places at once.** `DiscoveryConfig::browser_backends` lists
+  up to eight backends, used together: values go to all of them, lookups merge
+  their answers, and a backend that fails is retried while the others carry on.
+  Each entry has a one-line text form (`nostr wss://relay.example`) that
+  `parse_browser_backend()` reads and `to_string()` writes, for settings.
+- **OpenDHT proxy failover.** One `opendht` entry can list several proxies into
+  the same DHT; the browser moves to the next when one fails.
+- Stores on a page share one connection per server.
+
+See [discovery backends](docs/DISCOVERY_BACKENDS.md) for how each backend
+works and which public servers were found to work.
+
+## Breaking change
+
+`DiscoveryConfig::browser_proxy_urls` is replaced by `browser_backends`. Wrap
+the old URLs in one `p2pdc::OpenDhtProxies{...}` entry to keep the old
+behavior.
 
 ## Notes
 
 The protocol and API are still experimental: pin the same p2pdc revision on all
-peers. Applications supply their own OpenDHT bootstrap peers, an HTTPS OpenDHT
-proxy for browsers, and STUN/TURN servers when needed. Android, iOS and Safari
-are not yet validated.
+peers. Native nodes use the DHT directly and ignore browser backends.
+Applications supply their own OpenDHT bootstrap peers, browser backends, and
+STUN/TURN servers when needed. Android, iOS and Safari are not yet validated.
 
 See the [build instructions](README.md#native-build-and-tests), the
 [public API guide](docs/PUBLIC_API.md) and the
