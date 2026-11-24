@@ -37,7 +37,7 @@ whether trying again, or elsewhere, may help (`isTransientProxyError`).
 | OpenDHT proxies | HTTPS proxies into one DHT; failover between them | POST a value | GET the key | streaming GET |
 | Nostr relay | one `wss://` relay (NIP-01) | publish a signed event tagged with the key, expiring (NIP-40) | REQ with the tag until EOSE | REQ kept open |
 | MQTT broker | one MQTT 5 broker over `wss://` | publish a retained message to a topic of its own under the key, expiring | subscribe and collect the retained messages | subscription kept open |
-| PeerJS server | one PeerJS server (`wss://`), which only forwards messages between IDs | send to the key's host | ask the key's host | ask the key's host to forward new values |
+| PeerJS server | one PeerJS server (`wss://`), which only relays WebRTC signalling between IDs | send to the key's host over a data channel | ask the key's host | ask the key's host to forward new values |
 
 **Nostr:** events are kind 30078 (application data), with a `d` tag naming the value, an
 `x` tag holding the key in hex and an `expiration` tag. Each store signs with a throwaway
@@ -48,14 +48,33 @@ signature inside the value is the one peers check.
 expiry interval; a lookup subscribes to `p2pdc/v1/<key hex>/+` and collects what arrives
 until the broker goes quiet.
 
-**PeerJS:** the server stores nothing and cannot list who is connected; it forwards messages
-to an ID while that ID is connected. So each key gets a host: the first store that registers
-the PeerJS ID derived from the key keeps that key's values in memory, answers lookups and
-forwards new values to watchers. Others get `ID-TAKEN` and send their requests to that ID.
-When the host leaves, its ID becomes free; the next store to need the key registers it and
-becomes the host, and every store puts its own current values again. Values are lost with a
-host that leaves only until their writers' next put, which leases do well within their
-lifetime.
+**PeerJS:** the server stores nothing and cannot list who is connected; it relays WebRTC
+signalling to an ID while that ID is connected, as PeerJS is meant to be used. So each key
+gets a host: the first store that registers the PeerJS ID `p2pdc<key hex>` keeps that key's
+values in memory, answers lookups and forwards new values to watchers. Others get `ID-TAKEN`
+and, from their own ID `p2pdcc<32 hex>`, open a PeerJS data connection to the host:
+
+- the client creates an `RTCPeerConnection` with an ordered, reliable data channel labelled
+  with a fresh connection ID `dc_<32 hex>`, and sends `OFFER` with the payload the PeerJS
+  client library sends (`sdp`, `type: "data"`, `connectionId`, `label`, `reliable: true`,
+  `serialization: "raw"`); the host answers with `ANSWER` (`sdp`, `type`, `connectionId`) and
+  both send each ICE candidate as `CANDIDATE` (`candidate`, `type`, `connectionId`).
+  Candidates that arrive before the remote description wait for it;
+- ICE uses the PeerJS client's defaults: Google's STUN server and the public TURN relays
+  PeerJS runs (`eu-0` and `us-0.turn.peerjs.com`);
+- requests, replies and pushed values then travel over the channel as JSON messages
+  (`put`, `get`, `watch`, `unwatch`; `ack`, `full`, `values`, `value`), each sent as
+  fragments of up to 16 KiB marked `+` (more follows) or `=` (last), up to 2 MiB in all.
+
+A client keeps one data connection per host, shared by every store of the page and closed
+after a minute unused; a host accepts up to 128. Once open, a connection no longer needs the
+server. When the host leaves (its data connection closes, or the server answers an offer
+with `EXPIRE`), its ID becomes free: the next store to need the key registers it and becomes
+the host, every store puts its own current values again, and watches subscribe again.
+Watches are leases of 90 seconds, renewed every 30. The protocol needs only a WebSocket and
+WebRTC data channels, so a native port could use libdatachannel; native nodes use the DHT
+and do not use this backend yet. Where WebRTC is missing (as in Node) the backend refuses
+every request with a permanent error, and other backends carry on.
 
 ## Servers, as tested
 
@@ -69,9 +88,11 @@ Live tests (November 2026) found these differences between public servers:
 - **MQTT:** the broker must keep retained messages. test.mosquitto.org and broker.hivemq.com
   do; broker.emqx.io acknowledged puts with reason 0x10 but replayed nothing, so lookups
   there find only values put while watching. A backend cannot tell from the acknowledgment.
-- **PeerJS:** the public 0.peerjs.com registers IDs but forwards only messages shaped like a
-  genuine PeerJS WebRTC offer, and drops everything else, so p2pdc does not use it; run
-  your own `peerjs-server`, which forwards any message.
+- **PeerJS:** the public `wss://0.peerjs.com/peerjs` (key `peerjs`) relays only genuine PeerJS
+  signalling and drops anything else. p2pdc sends nothing else, so it works there: two
+  clients put, looked up and watched values through it, and a host's leaving handed the key
+  to a watcher, which then heard new values. A self-hosted `peerjs-server` works the same
+  way.
 
 Each store keeps one connection per server, shared with every other store of the page that
 uses the same server (`discovery_backends.mjs`): p2pdc creates a store per space and per
@@ -113,9 +134,17 @@ nodes use the DHT directly and ignore browser backends.
   server written for the tests (`tests/support/`): a WebSocket server, a Nostr relay, an
   MQTT 5 broker and a PeerJS server. They cover put, lookup, watch, expiry, limits,
   reconnection and failure codes, and the fan-out store's merging and failure handling.
+  The PeerJS server relays, like the public one, only messages shaped as PeerJS signalling,
+  and the PeerJS tests run over an in-memory stand-in for `RTCPeerConnection`
+  (`tests/support/fake_webrtc.mjs`) that connects only after a full offer, answer and
+  candidate exchange.
+- With real WebRTC, `tests/peerjs_webrtc_browser_test.mjs` runs put, lookup, watch and host
+  takeover in headless Chromium against that server (opt-in:
+  `P2PDC_TEST_CHROMIUM=/usr/bin/chromium`).
 - BIP340 signing is checked against the official test vectors.
 - Live tests (`tests/discovery_backends_live_test.mjs`, opt-in through
   `P2PDC_TEST_NOSTR_RELAYS`, `P2PDC_TEST_MQTT_BROKERS` and `P2PDC_TEST_PEERJS_SERVERS`) run
-  put, lookup and watch between two clients against public servers.
+  put, lookup and watch between two clients against public servers; PeerJS servers are
+  tested in headless Chromium, so they also need `P2PDC_TEST_CHROMIUM`.
 - End to end, two browser users of PeerChalk, each given one backend only, found each
   other and connected through a Nostr relay, an MQTT broker and a PeerJS server.

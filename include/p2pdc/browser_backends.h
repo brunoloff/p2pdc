@@ -32,9 +32,9 @@ struct MqttBroker {
     std::string url;
     bool operator==(const MqttBroker &) const = default;
 };
-// A server running peers/peerjs-server, which forwards messages between connected IDs; key is
-// the server's API key. The public 0.peerjs.com forwards only genuine PeerJS WebRTC offers,
-// so it cannot serve; run your own.
+// A server running peers/peerjs-server, which relays WebRTC signalling between connected IDs;
+// key is the server's API key. Browsers reach each key's host over a data connection set up
+// through it, so the public wss://0.peerjs.com/peerjs (key "peerjs") serves.
 struct PeerJsServer {
     std::string url;
     std::string key = "peerjs";

@@ -3,10 +3,11 @@ import { randomId } from "./store_limits.mjs";
 import { SocketChannel } from "./websocket_channel.mjs";
 
 const heartbeatMs = 25000; // the server drops clients silent for 90 s
+const signalTypes = new Set(["OFFER", "ANSWER", "CANDIDATE"]);
 
-// One ID registered with a PeerJS server (peers/peerjs-server): messages to that ID arrive
-// here, with the sender's ID that the server sets. The server forwards OFFER messages, keeps
-// those for an absent ID five seconds, then tells the sender with EXPIRE.
+// One ID registered with a PeerJS server (peers/peerjs-server). The server relays WebRTC
+// signalling (OFFER, ANSWER, CANDIDATE) between IDs, setting each message's sender; it keeps
+// messages for an absent ID a few seconds, then tells the sender with EXPIRE.
 export class PeerJsSocket {
     constructor(url, key, id, handlers, timeoutMs) {
         const address = new URL(url);
@@ -48,12 +49,16 @@ export class PeerJsSocket {
             const error = new ProxyError(/limit/i.test(text) ? "http_error" : "rejected", `PeerJS server: ${text}`);
             if (error.code === "http_error") error.status = 503;
             this.fail(error);
-        } else if (message.type === "OFFER" && typeof message.src === "string") this.handlers.message(message.src, message.payload);
+        } else if (signalTypes.has(message.type) && typeof message.src === "string") this.handlers.signal(message);
         else if ((message.type === "EXPIRE" || message.type === "LEAVE") && typeof message.src === "string")
             this.handlers.gone(message.src);
     }
     post(message) { try { this.channel.send(JSON.stringify(message)); } catch { /* reported by close */ } }
-    send(dst, payload) { this.channel.send(JSON.stringify({ type: "OFFER", dst, payload })); }
+    // type is OFFER, ANSWER or CANDIDATE, with a payload as the PeerJS client sends it.
+    send(type, dst, payload) {
+        if (!signalTypes.has(type)) throw new TypeError("PeerJS servers relay only WebRTC signalling");
+        this.channel.send(JSON.stringify({ type, payload, dst }));
+    }
     // The next register() connects again, under the same ID and token.
     lost(error) {
         clearInterval(this.heartbeat); this.heartbeat = null;
