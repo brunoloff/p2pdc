@@ -83,7 +83,8 @@ export async function openChromiumPage(path) {
         browser.child.kill();
         await new Promise((resolve) => (browser.child.exitCode === null ? browser.child.once("exit", resolve) : resolve()));
         server.close();
-        await rm(profile, { recursive: true, force: true });
+        // Chromium's helper processes may still write the profile for a moment.
+        await rm(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     };
     try {
         const tools = await devtools(await browser.endpoint);
