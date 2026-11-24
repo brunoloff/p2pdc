@@ -327,14 +327,27 @@ std::variant<RecordWatch, StoreError> BrowserStore::watch(ByteView key,
         throw;
     }
 }
+
+// The bridge takes the URLs newline-separated; a URL holding a newline is invalid anyway.
+std::string joined_urls(const std::vector<std::string> &urls) {
+    if (urls.empty() || urls.size() > 8)
+        throw std::invalid_argument("between 1 and 8 browser proxy URLs are required");
+    std::string joined;
+    for (const auto &url : urls) {
+        if (url.empty() || url.find_first_of("\r\n") != std::string::npos)
+            throw std::invalid_argument("invalid browser proxy URL");
+        joined += (joined.empty() ? "" : "\n") + url;
+    }
+    return joined;
+}
 } // namespace
 
-RecordStore make_browser_record_store(std::string proxy_url, StoreLimits limits,
-                                      unsigned timeout_ms) {
-    if (proxy_url.empty() || proxy_url.size() > 4096 || !limits.max_value_bytes ||
-        limits.max_value_bytes > 32768 || !limits.max_values || limits.max_values > 1024 ||
-        !limits.max_total_bytes || limits.max_total_bytes > 16 * 1024 * 1024 || !timeout_ms ||
-        timeout_ms > 600000)
+RecordStore make_browser_record_store(const std::vector<std::string> &proxy_urls,
+                                      StoreLimits limits, unsigned timeout_ms) {
+    const std::string proxy_url = joined_urls(proxy_urls);
+    if (proxy_url.size() > 4096 || !limits.max_value_bytes || limits.max_value_bytes > 32768 ||
+        !limits.max_values || limits.max_values > 1024 || !limits.max_total_bytes ||
+        limits.max_total_bytes > 16 * 1024 * 1024 || !timeout_ms || timeout_ms > 600000)
         throw std::invalid_argument("invalid browser record store limits");
     const auto id = proxy_create(proxy_url.data(), proxy_url.size(), limits.max_value_bytes,
                                  limits.max_values, limits.max_total_bytes, timeout_ms);

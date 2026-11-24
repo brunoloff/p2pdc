@@ -40,8 +40,10 @@ struct DiscoveryConfig {
     std::uint32_t network_id = 0;
     std::vector<BootstrapServer> bootstrap_servers;
     std::optional<NativeBindAddresses> bind_addresses;
-    // Browser-accessible OpenDHT proxy endpoints. Currently supply exactly one. URLs
-    // require HTTPS, except an HTTP loopback endpoint may be used for testing.
+    // Browser-accessible OpenDHT proxy endpoints, 1 to 8, all reaching the same DHT. The
+    // browser uses the first that works, in order, and moves on to the next when one is
+    // unreachable, times out or answers 408, 429 or 5xx. URLs require HTTPS, except an HTTP
+    // loopback endpoint may be used for testing.
     std::vector<std::string> browser_proxy_urls;
     // Maximum retained connection handles per node, including pending attempts.
     // Shared by all capabilities. Valid range: 1 through 1024.

@@ -1,4 +1,4 @@
-import { OpenDhtProxy } from "./opendht_proxy.mjs";
+import { proxyFromUrls } from "./failover_proxy.mjs";
 import { isTransientProxyError, keyHex } from "./proxy_codec.mjs";
 import { SharedProxyWatch } from "./shared_proxy_watch.mjs";
 
@@ -16,8 +16,9 @@ class RecordBridge {
     }
     create(url, limits) {
         if (this.next > 0xffffffff) throw new RangeError("store identifiers exhausted");
+        // Several proxies arrive newline-separated; watch streams count against the first's origin.
         const proxy = this.createProxy(url, limits), id = this.next++;
-        this.stores.set(id, { proxy, origin: new URL(url).origin,
+        this.stores.set(id, { proxy, origin: new URL(url.split("\n")[0]).origin,
                               identity: JSON.stringify([url, limits]), operations: new Map() });
         return id;
     }
@@ -104,6 +105,6 @@ class RecordBridge {
     }
 }
 
-export function createRecordBridge(deliver, createProxy = (url, limits) => new OpenDhtProxy(url, limits)) {
+export function createRecordBridge(deliver, createProxy = proxyFromUrls) {
     return new RecordBridge(createProxy, deliver);
 }

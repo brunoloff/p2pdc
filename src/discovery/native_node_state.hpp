@@ -30,7 +30,7 @@ struct IncomingLeaseSlot {
 
 struct Node::State {
 #ifdef __EMSCRIPTEN__
-    State(Executor application, std::string proxy_url);
+    State(Executor application, std::vector<std::string> proxy_urls);
 #else
     State(Executor application, detail::RunnerStart starter);
     void on_started(detail::RunnerStartResult result);
@@ -60,7 +60,7 @@ struct Node::State {
     Executor executor;
     CallbackGate gate;
 #ifdef __EMSCRIPTEN__
-    std::string proxy_url;
+    std::vector<std::string> proxy_urls;
 #else
     detail::RunnerStart start_runner;
     std::unique_ptr<detail::NativeRunnerOwner> owner;

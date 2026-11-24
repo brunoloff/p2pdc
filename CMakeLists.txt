@@ -82,7 +82,8 @@ else()
     target_compile_options(p2pdc PUBLIC -fexceptions)
     set(p2pdc_proxy_sources
         src/browser/proxy_codec.mjs src/browser/proxy_stream.mjs
-        src/browser/opendht_proxy.mjs src/browser/polling_proxy_watch.mjs src/browser/fallback_proxy_watch.mjs
+        src/browser/opendht_proxy.mjs src/browser/failover_proxy.mjs
+        src/browser/polling_proxy_watch.mjs src/browser/fallback_proxy_watch.mjs
         src/browser/shared_proxy_watch.mjs src/browser/record_store_bridge.mjs
         src/browser/record_store_prelude.js)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${p2pdc_proxy_sources})

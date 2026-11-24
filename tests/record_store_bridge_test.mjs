@@ -158,3 +158,11 @@ test("operation count is bounded and synchronous backend failures release their 
     assert.throws(() => broken.put(other, 1, key, Uint8Array.of(1)), /broken/);
     broken.close(other);
 });
+
+test("a store over several proxies takes them newline-separated", () => {
+    const bridge = createRecordBridge(() => true);
+    const id = bridge.create("https://one.example\nhttps://two.example", {});
+    assert.equal(bridge.stores.get(id).origin, "https://one.example");
+    assert.equal(bridge.stores.get(id).proxy.proxies.length, 2);
+    assert.throws(() => bridge.create("https://one.example\nftp://two.example", {}), TypeError);
+});

@@ -15,9 +15,10 @@ bool rejects_invalid_configuration(Executor executor) {
             return true;
         }
     };
-    DiscoveryConfig insecure, multiple, capacity;
+    DiscoveryConfig insecure, mixed, too_many, capacity;
     insecure.browser_proxy_urls = {"http://example.com"};
-    multiple.browser_proxy_urls = {"https://one.example", "https://two.example"};
+    mixed.browser_proxy_urls = {"https://one.example", "http://two.example"};
+    too_many.browser_proxy_urls = std::vector<std::string>(9, "https://one.example");
     capacity.browser_proxy_urls = {"http://127.0.0.1:49412"};
     capacity.max_connections = 0;
     if (!rejects(capacity))
@@ -27,7 +28,11 @@ bool rejects_invalid_configuration(Executor executor) {
         return false;
     capacity.max_connections = 10;
     auto valid = Node::create(capacity, executor);
-    return valid && rejects({}) && rejects(std::move(insecure)) && rejects(std::move(multiple));
+    DiscoveryConfig several;
+    several.browser_proxy_urls = {"https://one.example", "https://two.example"};
+    auto failover = Node::create(std::move(several), executor);
+    return valid && failover && rejects({}) && rejects(std::move(insecure)) &&
+           rejects(std::move(mixed)) && rejects(std::move(too_many));
 }
 bool imports_identity(Executor executor) {
     DiscoveryConfig config;
