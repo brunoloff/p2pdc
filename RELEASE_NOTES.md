@@ -1,3 +1,36 @@
+# Unreleased
+
+## Changes since 0.3.0
+
+- **Native nodes meet through Nostr relays and MQTT brokers too.** Besides joining
+  the DHT, a native node now uses the Nostr relays and MQTT 5 brokers of its backend
+  list, all at once with the same rules as browsers, so two people still meet when
+  one of them is on a network that blocks the DHT. A node keeps one connection per
+  server, shared by all its stores. OpenDHT proxy entries remain browser-only;
+  native nodes do not use PeerJS servers yet.
+- New dependencies for native builds: libdatachannel built with WebSocket support,
+  libsecp256k1 0.7.0 (Nostr signatures) and nlohmann/json 3.12.0; `deps/` builds
+  them. `-DP2PDC_ENABLE_NETWORK_BACKENDS=OFF` builds without them.
+- **TLS on Windows:** libdatachannel does not check server certificates on Windows,
+  so these connections are not authenticated there (see
+  [discovery backends](docs/DISCOVERY_BACKENDS.md#in-native-nodes)).
+
+## Breaking change: browser backends are now discovery backends
+
+The backends are no longer browser-only, so their names changed:
+
+| 0.3.0 | now |
+|---|---|
+| `p2pdc/browser_backends.h` | `p2pdc/discovery_backends.h` |
+| `DiscoveryConfig::browser_backends` | `DiscoveryConfig::discovery_backends` |
+| `BrowserBackend` | `DiscoveryBackend` |
+| `parse_browser_backend()` | `parse_discovery_backend()` |
+| `valid_browser_backend()` | `valid_discovery_backend()` |
+| `max_browser_backends`, `max_browser_proxies` | `max_discovery_backends`, `max_opendht_proxies` |
+
+Native nodes used to ignore the list; they now check it, and `Node::create` throws
+`std::invalid_argument` for more than eight entries or an invalid one.
+
 # 0.3.0
 
 p2pdc discovers peers through OpenDHT and opens authenticated, reliable,

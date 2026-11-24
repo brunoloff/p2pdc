@@ -1,6 +1,6 @@
 #include "browser_record_store.hpp"
 
-#include "../discovery/browser_backends_json.hpp"
+#include "../discovery/discovery_backends_json.hpp"
 
 #include <emscripten.h>
 
@@ -332,9 +332,9 @@ std::variant<RecordWatch, StoreError> BrowserStore::watch(ByteView key,
 
 } // namespace
 
-RecordStore make_browser_record_store(const std::vector<BrowserBackend> &backends,
+RecordStore make_browser_record_store(const std::vector<::p2pdc::DiscoveryBackend> &backends,
                                       StoreLimits limits, unsigned timeout_ms) {
-    const std::string proxy_url = browser_backends_json(backends);
+    const std::string proxy_url = discovery_backends_json(backends);
     if (proxy_url.size() > 4096 || !limits.max_value_bytes || limits.max_value_bytes > 32768 ||
         !limits.max_values || limits.max_values > 1024 || !limits.max_total_bytes ||
         limits.max_total_bytes > 16 * 1024 * 1024 || !timeout_ms || timeout_ms > 600000)

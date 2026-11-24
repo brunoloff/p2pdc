@@ -64,10 +64,11 @@ untrusted certificates and hostname mismatch. Other browser versions and
 real-network relay-only enforcement remain unverified.
 
 `p2pdc/discovery_config.h` defines native OpenDHT bind, network and bootstrap
-settings and browser discovery backends in one `DiscoveryConfig`. Native builds
-ignore the backends; a WebAssembly node uses all of its backends at once: OpenDHT
-proxies, Nostr relays, MQTT brokers or PeerJS servers (`p2pdc/browser_backends.h`,
-[docs/DISCOVERY_BACKENDS.md](docs/DISCOVERY_BACKENDS.md)).
+settings and discovery backends in one `DiscoveryConfig`. A node uses all of its
+backends at once: OpenDHT proxies, Nostr relays, MQTT brokers or PeerJS servers
+(`p2pdc/discovery_backends.h`, [docs/DISCOVERY_BACKENDS.md](docs/DISCOVERY_BACKENDS.md)).
+Native nodes join the DHT directly and use Nostr relays and MQTT brokers beside it;
+they skip OpenDHT proxies and do not use PeerJS servers yet.
 The preliminary `p2pdc/node.h` interface accepts these settings and
 supports asynchronous native startup and shutdown when OpenDHT is enabled.
 With libsodium enabled, `Node::watch` provides bounded subscriptions to verified

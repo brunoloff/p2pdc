@@ -59,7 +59,7 @@ add_library(p2pdc
     src/discovery/native_publisher.cpp
     src/discovery/native_signal_pipe.cpp
     src/discovery/record_store.cpp
-    src/discovery/browser_backends.cpp
+    src/discovery/discovery_backends.cpp
     src/discovery/subscription.cpp
     src/discovery/signaling_queue.cpp
     src/protocol/frame.cpp
@@ -272,18 +272,20 @@ if(P2PDC_ENABLE_NATIVE_TRANSPORT)
     target_link_libraries(p2pdc PRIVATE LibDataChannel::LibDataChannel)
 endif()
 
+include(cmake/NetworkBackends.cmake)
 include(cmake/EchoStandalone.cmake)
 if(BUILD_TESTING)
     find_package(GTest REQUIRED)
     include(GoogleTest)
     include(cmake/NativeOptionsTests.cmake)
+    include(cmake/NetworkBackendsTests.cmake)
     if(P2PDC_ENABLE_OPENDHT AND UNIX AND NOT APPLE)
         add_executable(p2pdc_browser_record_native_peer EXCLUDE_FROM_ALL tests/browser_record_native_peer.cpp)
         target_link_libraries(p2pdc_browser_record_native_peer PRIVATE p2pdc::p2pdc ${p2pdc_opendht_target} msgpack-cxx)
         target_compile_options(p2pdc_browser_record_native_peer PRIVATE ${p2pdc_warning_flags})
     endif()
     add_executable(p2pdc_tests
-        tests/browser_backends_test.cpp
+        tests/discovery_backends_test.cpp
         tests/callback_gate_test.cpp
         tests/backend_drain_test.cpp
         tests/deferred_events_test.cpp

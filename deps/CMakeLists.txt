@@ -129,6 +129,26 @@ ExternalProject_Add(libdatachannel
     GIT_SUBMODULES_RECURSE TRUE
     UPDATE_DISCONNECTED TRUE
     PATCH_COMMAND git apply "${patches}/libdatachannel-v0.23.2-p2pdc.patch"
-    CMAKE_ARGS ${cmake_arguments} -DUSE_NICE=ON -DNO_MEDIA=ON -DNO_WEBSOCKET=ON
+    # WebSocket carries the Nostr and MQTT discovery backends (docs/DISCOVERY_BACKENDS.md).
+    CMAKE_ARGS ${cmake_arguments} -DUSE_NICE=ON -DNO_MEDIA=ON -DNO_WEBSOCKET=OFF
         -DNO_EXAMPLES=ON -DNO_TESTS=ON
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target datachannel)
+
+# BIP340 Schnorr signatures for Nostr events (MIT).
+ExternalProject_Add(secp256k1
+    URL https://github.com/bitcoin-core/secp256k1/archive/refs/tags/v0.7.0.tar.gz
+    URL_HASH SHA256=073d19064f3600014750d6949b31a0c957aa7b98920fb4aaa495be07e8e7cd00
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    CMAKE_ARGS ${cmake_arguments} -DSECP256K1_ENABLE_MODULE_SCHNORRSIG=ON
+        -DSECP256K1_ENABLE_MODULE_EXTRAKEYS=ON -DSECP256K1_ENABLE_MODULE_ECDH=OFF
+        -DSECP256K1_ENABLE_MODULE_RECOVERY=OFF -DSECP256K1_ENABLE_MODULE_ELLSWIFT=OFF
+        -DSECP256K1_ENABLE_MODULE_MUSIG=OFF -DSECP256K1_BUILD_TESTS=OFF
+        -DSECP256K1_BUILD_EXHAUSTIVE_TESTS=OFF -DSECP256K1_BUILD_BENCHMARK=OFF
+        -DSECP256K1_BUILD_EXAMPLES=OFF)
+
+# JSON for the Nostr and PeerJS protocols (MIT; header only).
+ExternalProject_Add(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    CMAKE_ARGS ${cmake_arguments} -DJSON_BuildTests=OFF -DJSON_Install=ON)

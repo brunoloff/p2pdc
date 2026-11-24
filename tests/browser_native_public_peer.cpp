@@ -72,7 +72,7 @@ BrowserNativePeer::BrowserNativePeer(Runtime &runtime, bool offerer, bool recove
         throw std::runtime_error("native test identity failed");
     native_key_ = std::get<Identity>(native).public_key();
     DiscoveryConfig config;
-    config.browser_backends = {p2pdc::OpenDhtProxies{{"http://127.0.0.1:49412"}}};
+    config.discovery_backends = {p2pdc::OpenDhtProxies{{"http://127.0.0.1:49412"}}};
     auto result = Node::create_with_identity(config, runtime_.executor(), Bytes(32, std::byte{2}),
                                              Bytes(32, std::byte{4}));
     auto *node = std::get_if<std::unique_ptr<Node>>(&result);

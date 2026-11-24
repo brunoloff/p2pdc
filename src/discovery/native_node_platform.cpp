@@ -1,5 +1,8 @@
 #include "native_node_state.hpp"
 
+#include "discovery_backends_json.hpp"
+
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -9,10 +12,26 @@
 
 namespace p2pdc {
 using Phase = detail::NodePhase;
+namespace {
+// Nostr relays, MQTT brokers and PeerJS servers; native nodes join the DHT themselves.
+std::shared_ptr<detail::NetworkBackends>
+network_backends(const std::vector<DiscoveryBackend> &list) {
+#ifdef P2PDC_HAVE_NETWORK_BACKENDS
+    return detail::NetworkBackends::create(list);
+#else
+    detail::validate_discovery_backends(list);
+    if (!std::ranges::all_of(
+            list, [](const auto &entry) { return std::holds_alternative<OpenDhtProxies>(entry); }))
+        throw std::invalid_argument("this build of p2pdc has no network discovery backends");
+    return nullptr;
+#endif
+}
+} // namespace
 
-Node::State::State(Executor application, detail::RunnerStart starter)
+Node::State::State(Executor application, detail::RunnerStart starter,
+                   std::shared_ptr<detail::NetworkBackends> backends)
     : backend_drain(application), executor(backend_drain.executor()), gate(std::move(application)),
-      start_runner(std::move(starter)) {}
+      start_runner(std::move(starter)), network_backends(std::move(backends)) {}
 void Node::State::on_started(detail::RunnerStartResult result) {
     if (phase != Phase::Starting) {
         return;
@@ -40,8 +59,10 @@ std::unique_ptr<Node> Node::create(DiscoveryConfig config, Executor executor) {
     if (config.max_connections == 0 || config.max_connections > 1024)
         throw std::invalid_argument("max_connections must be between 1 and 1024");
     const auto max_connections = config.max_connections;
+    auto backends = network_backends(config.discovery_backends);
     auto start_runner = detail::make_native_runner_start(std::move(config));
-    auto state = std::make_shared<State>(std::move(executor), std::move(start_runner));
+    auto state =
+        std::make_shared<State>(std::move(executor), std::move(start_runner), std::move(backends));
     state->max_connections = max_connections;
     return std::unique_ptr<Node>(new Node(std::move(state)));
 }
@@ -69,6 +90,10 @@ void Node::State::launch(std::weak_ptr<State> weak) {
 
 void Node::State::stop_platform(std::function<void(std::exception_ptr)> after_join,
                                 std::function<void()> no_runner) {
+#ifdef P2PDC_HAVE_NETWORK_BACKENDS
+    if (network_backends)
+        network_backends->close();
+#endif
     if (owner) {
         if (!owner->shutdown(std::move(after_join)))
             throw std::logic_error("node runner unexpectedly stopping");
@@ -81,7 +106,7 @@ void Node::State::reset_platform() { runner.reset(); }
 bool Node::State::platform_healthy() const noexcept { return !owner || !owner->delivery_failed(); }
 #ifdef P2PDC_HAVE_DISCOVERY
 detail::RecordStore Node::State::make_store(detail::StoreLimits limits) const {
-    return detail::NativeStore(runner, limits);
+    return detail::make_native_record_store(runner, network_backends, limits);
 }
 #endif
 } // namespace p2pdc

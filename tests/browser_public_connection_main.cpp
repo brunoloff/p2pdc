@@ -79,7 +79,7 @@ int main() {
             return 0;
         }
         p2pdc::DiscoveryConfig config;
-        config.browser_backends = {p2pdc::OpenDhtProxies{{"http://127.0.0.1:49412"}}};
+        config.discovery_backends = {p2pdc::OpenDhtProxies{{"http://127.0.0.1:49412"}}};
         const int mixed = mixed_mode();
         if (mixed) {
             (void)p2pdc_test::run_mixed_race(

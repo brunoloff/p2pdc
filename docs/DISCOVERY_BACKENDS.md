@@ -1,8 +1,10 @@
-# Browser discovery backends
+# Discovery backends
 
-Browsers cannot join the DHT, so a browser node finds peers, and exchanges connection
-offers, through servers it can reach over HTTPS or WebSocket. This document describes how
-p2pdc lets an application choose those servers, and the four kinds it supports.
+Besides the DHT, nodes find peers, and exchange connection offers, through servers they can
+reach over HTTPS or WebSocket. Browsers cannot join the DHT, so for them these servers are the
+only way to meet; native nodes join the DHT directly and use the servers as well, so that two
+people still meet when one of them is on a network that blocks the DHT. This document
+describes how p2pdc lets an application choose those servers, and the four kinds it supports.
 
 ## What every backend provides
 
@@ -17,7 +19,7 @@ Values are opaque to the backend: p2pdc signs, encrypts and checks them itself, 
 whatever a backend returns as untrusted. A backend must only keep values long enough, hand
 them to anyone who asks for the key, and push new ones to watchers.
 
-In the browser the record store is implemented in JavaScript (`src/browser/`), by objects
+In the browser the backends are implemented in JavaScript (`src/browser/`), by objects
 with three methods, the **record backend** contract:
 
 ```js
@@ -73,9 +75,10 @@ Live tests (November 2026) found these differences between public servers:
   genuine PeerJS WebRTC offer, and drops everything else, so p2pdc does not use it; run
   your own `peerjs-server`, which forwards any message.
 
-Each store keeps one connection per server, shared with every other store of the page that
-uses the same server (`discovery_backends.mjs`): p2pdc creates a store per space and per
-connection attempt, and servers limit how many connections one address may open.
+Each store keeps one connection per server, shared with every other store of the page (or
+native node) that uses the same server (`discovery_backends.mjs`, `network_backends.cpp`):
+p2pdc creates a store per space and per connection attempt, and servers limit how many
+connections one address may open.
 
 ## Several meeting places at once
 
@@ -91,11 +94,47 @@ another meeting place would no longer meet the nodes that stayed:
 - a watch watches every backend; one that fails is watched again after a backoff while the
   others carry on.
 
+## In native nodes
+
+Native nodes join the DHT themselves and, beside it, use every Nostr relay and MQTT broker of
+their backend list, all at once with the same rules (`src/backends/`). OpenDHT entries are
+skipped: they name HTTPS proxies into the DHT that a native node has no need for. PeerJS
+entries are not used by native nodes yet.
+
+The protocol layers are ports of the JavaScript ones, one C++ file per module:
+`socket_channel.cpp` (`websocket_channel.mjs`), `nostr_event.cpp` and `nostr_relay.cpp`
+(`nostr_relay.mjs`), `mqtt_codec.cpp` (`mqtt_codec.mjs`), `mqtt_broker.cpp`
+(`mqtt_broker.mjs`), `backend_records.cpp` (`store_limits.mjs`) and `fan_out_store.cpp` with
+`fan_out_watch.cpp` (`fan_out_store.mjs`). `network_backends.cpp` plays the part of
+`discovery_backends.mjs`: one client per server and node, shared by every store.
+
+- **Threads.** All clients of a node run on one thread of their own (`backend_loop.cpp`), as
+  the JavaScript runs on the page's event loop. Results of the DHT store are passed to that
+  thread too, so the fan-out store delivers every callback from it, one at a time.
+- **WebSocket and TLS.** Connections use libdatachannel's WebSocket client. On Linux it checks
+  certificates against the system's certificate authorities and the server's name
+  (`VerifiedTlsTransport`); a test checks that a server with a self-signed certificate is
+  refused. The OpenSSL that `deps/` builds for macOS has no certificate store of its own, so
+  p2pdc points it at the system bundle, `/etc/ssl/cert.pem`; this has not been tested on a
+  Mac. **On Windows, libdatachannel 0.23.2 does not check certificates at all**: someone on
+  the path could read, hold back or answer the traffic of these backends. Values stay signed
+  and encrypted by p2pdc, so they could not forge or read peers' records, but they could see
+  which keys a node uses and keep peers from meeting. Fixing this needs a libdatachannel patch
+  that checks certificates on Windows against a bundle the application ships.
+- **Signatures.** Nostr events are signed with libsecp256k1's BIP340 Schnorr signatures, and
+  their ids hashed with libsodium's SHA-256; the official test vectors are checked.
+- **Building.** The backends need libdatachannel built with WebSocket support, libsecp256k1
+  and nlohmann/json; `deps/` builds all three. `P2PDC_ENABLE_NETWORK_BACKENDS` (on by default
+  for native builds other than Android) turns them off; without them, a native node refuses a
+  backend list that names anything but OpenDHT proxies.
+
 ## Choosing backends
 
-`DiscoveryConfig::browser_backends` lists the entries, as a variant of `OpenDhtProxies`,
-`NostrRelay`, `MqttBroker` and `PeerJsServer` (`p2pdc/browser_backends.h`). For settings typed by people, each entry also
-has a one-line form that `parse_browser_backend()` reads and `to_string()` writes:
+`DiscoveryConfig::discovery_backends` lists the entries, as a `DiscoveryBackend`: a variant of
+`OpenDhtProxies`, `NostrRelay`, `MqttBroker` and `PeerJsServer` (`p2pdc/discovery_backends.h`).
+Browser nodes take 1 to 8 entries; native nodes 0 to 8, and `Node::create` throws
+`std::invalid_argument` for an invalid one. For settings typed by people, each entry also has
+a one-line form that `parse_discovery_backend()` reads and `to_string()` writes:
 
 ```text
 opendht https://dhtproxy.jami.net https://proxy.example
@@ -104,8 +143,9 @@ mqtt wss://broker.example/mqtt
 peerjs wss://0.peerjs.com/peerjs?key=peerjs
 ```
 
-Enabling, disabling or switching a backend is adding, removing or replacing an entry. Native
-nodes use the DHT directly and ignore browser backends.
+Enabling, disabling or switching a backend is adding, removing or replacing an entry. An
+application can give browser and native nodes the same list: native nodes skip the OpenDHT
+entry, since they join the DHT itself.
 
 ## Testing
 
@@ -119,3 +159,14 @@ nodes use the DHT directly and ignore browser backends.
   put, lookup and watch between two clients against public servers.
 - End to end, two browser users of PeerChalk, each given one backend only, found each
   other and connected through a Nostr relay, an MQTT broker and a PeerJS server.
+- Native tests (`p2pdc_backend_tests`) start the same test servers with node
+  (`tests/support/serve_backends.mjs`) and cover the native clients the same way: put, lookup,
+  watch, limits, refusals, reconnection, a shared connection, and the fan-out store with fake
+  stores. The browser's own clients, run by node, and the native ones read and hear each
+  other's values through each server.
+- `p2pdc_network_node_tests` runs two native nodes, each alone in a DHT of its own, that find
+  each other, connect and echo through a Nostr relay, through an MQTT broker, and through a
+  broker beside an unreachable relay; without a shared backend they do not meet.
+- Native live tests (`p2pdc_backend_live_tests`, opt-in through the same variables as the
+  JavaScript ones) run put, lookup and watch between two native clients against public
+  servers.

@@ -10,6 +10,9 @@
 #include "native_runner_owner.hpp"
 #include "native_runner_start.hpp"
 #endif
+#ifdef P2PDC_HAVE_NETWORK_BACKENDS
+#include "../backends/network_backends.hpp"
+#endif
 #include "p2pdc/callback_gate.h"
 #include "p2pdc/node.h"
 
@@ -18,6 +21,9 @@
 
 namespace p2pdc {
 namespace detail {
+#ifndef P2PDC_HAVE_NETWORK_BACKENDS
+class NetworkBackends {};
+#endif
 enum class NodePhase { Created, Starting, Running, Failed, Stopping, Stopped };
 struct IncomingLeaseSlot {
     std::weak_ptr<DiscoveryBackend> lease;
@@ -30,9 +36,10 @@ struct IncomingLeaseSlot {
 
 struct Node::State {
 #ifdef __EMSCRIPTEN__
-    State(Executor application, std::vector<BrowserBackend> backends);
+    State(Executor application, std::vector<DiscoveryBackend> backends);
 #else
-    State(Executor application, detail::RunnerStart starter);
+    State(Executor application, detail::RunnerStart starter,
+          std::shared_ptr<detail::NetworkBackends> backends);
     void on_started(detail::RunnerStartResult result);
 #endif
     ~State();
@@ -60,11 +67,13 @@ struct Node::State {
     Executor executor;
     CallbackGate gate;
 #ifdef __EMSCRIPTEN__
-    std::vector<BrowserBackend> browser_backends;
+    std::vector<DiscoveryBackend> discovery_backends;
 #else
     detail::RunnerStart start_runner;
     std::unique_ptr<detail::NativeRunnerOwner> owner;
     std::shared_ptr<dht::DhtRunner> runner;
+    // Null when the node meets through the DHT only.
+    std::shared_ptr<detail::NetworkBackends> network_backends;
 #endif
     std::shared_ptr<const detail::EndpointIdentity> endpoint;
     MemoryBudget watch_budget{4 * 1024 * 1024};

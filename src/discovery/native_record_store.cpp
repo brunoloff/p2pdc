@@ -1,5 +1,10 @@
 #include "native_store.hpp"
 
+#ifdef P2PDC_HAVE_NETWORK_BACKENDS
+#include "../backends/network_backends.hpp"
+#endif
+
+#include <stdexcept>
 #include <utility>
 
 namespace p2pdc::detail {
@@ -41,5 +46,19 @@ class NativeRecordStore final : public RecordStoreBackend {
 
 NativeStore::operator RecordStore() const {
     return RecordStore(std::make_shared<NativeRecordStore>(*this));
+}
+
+RecordStore make_native_record_store(std::shared_ptr<dht::DhtRunner> runner,
+                                     const std::shared_ptr<NetworkBackends> &backends,
+                                     StoreLimits limits) {
+    RecordStore dht = NativeStore(std::move(runner), limits);
+#ifdef P2PDC_HAVE_NETWORK_BACKENDS
+    if (backends)
+        return backends->store(std::move(dht), limits);
+#else
+    if (backends)
+        throw std::logic_error("network backends in a build without them");
+#endif
+    return dht;
 }
 } // namespace p2pdc::detail

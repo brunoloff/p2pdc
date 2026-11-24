@@ -132,8 +132,8 @@ TEST_F(PublicWatchTest, InternalSnapshotCarriesVerifiedPeersAndPolicy) {
         make_public_watch(NativeStore(second, {1024, 512, 524288}), secret(), scheduler(), options,
                           handlers(), loop.executor(),
                           CallbackGate(loop.executor()), MemoryBudget(4 * 1024 * 1024));
-    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<DiscoveryBackend>>(result));
-    auto watch = std::get<std::shared_ptr<DiscoveryBackend>>(std::move(result));
+    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<detail::DiscoveryBackend>>(result));
+    auto watch = std::get<std::shared_ptr<detail::DiscoveryBackend>>(std::move(result));
     auto empty = watch->current_peers();
     ASSERT_TRUE(empty);
     EXPECT_TRUE(empty->peers.empty());

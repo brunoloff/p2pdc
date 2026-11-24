@@ -82,7 +82,7 @@ ConnectResult Node::connect(const Lease &lease, const Subscription &subscription
 #ifdef __EMSCRIPTEN__
         auto context = owner->make_store({32768, 128, 1048576});
 #else
-        auto context = owner->runner;
+        auto context = detail::AdmissionContext{owner->runner, owner->network_backends};
 #endif
         return valid_context(std::move(context), local, remote, endpoint, peer);
     };

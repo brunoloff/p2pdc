@@ -88,16 +88,19 @@ discovery; it does not authorize a particular peer.
 ```cpp
 p2pdc::DiscoveryConfig config;
 config.bootstrap_servers.push_back({"bootstrap.example.org", 4222});
-config.browser_backends.push_back(p2pdc::OpenDhtProxies{{"https://proxy.example.org"}});
+config.discovery_backends.push_back(p2pdc::OpenDhtProxies{{"https://proxy.example.org"}});
 auto node = p2pdc::Node::create(config, executor);
 ```
 
 Replace these illustrative addresses with services you operate or are
-authorized to use. Native discovery uses OpenDHT bootstrap settings and
-ignores browser backends. WebAssembly takes 1 to 8 browser backends, used all
-at once: OpenDHT proxies (with failover between proxies into the same DHT), Nostr
-relays, MQTT 5 brokers and PeerJS servers; `parse_browser_backend()` reads the
-one-line form for settings (see [DISCOVERY_BACKENDS.md](DISCOVERY_BACKENDS.md)).
+authorized to use. Discovery backends are used all at once: OpenDHT proxies
+(with failover between proxies into the same DHT), Nostr relays, MQTT 5 brokers
+and PeerJS servers; `parse_discovery_backend()` reads the one-line form for
+settings (see [DISCOVERY_BACKENDS.md](DISCOVERY_BACKENDS.md)). WebAssembly takes
+1 to 8 backends. Native nodes take 0 to 8: they join the DHT through the
+bootstrap settings, skip OpenDHT proxy entries, use Nostr relays and MQTT brokers
+beside the DHT, and do not use PeerJS servers yet; `Node::create` throws
+`std::invalid_argument` for an invalid entry.
 HTTP and WS loopback addresses are allowed for tests.
 Peers must use the same DHT network ID. The library does not select public
 servers for you.

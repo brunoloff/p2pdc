@@ -16,10 +16,10 @@ bool rejects_invalid_configuration(Executor executor) {
         }
     };
     DiscoveryConfig insecure, mixed, too_many, capacity;
-    insecure.browser_backends = {OpenDhtProxies{{"http://example.com"}}};
-    mixed.browser_backends = {OpenDhtProxies{{"https://one.example", "http://two.example"}}};
-    too_many.browser_backends = std::vector<BrowserBackend>(9, NostrRelay{"wss://relay.example"});
-    capacity.browser_backends = {OpenDhtProxies{{"http://127.0.0.1:49412"}}};
+    insecure.discovery_backends = {OpenDhtProxies{{"http://example.com"}}};
+    mixed.discovery_backends = {OpenDhtProxies{{"https://one.example", "http://two.example"}}};
+    too_many.discovery_backends = std::vector<DiscoveryBackend>(9, NostrRelay{"wss://relay.example"});
+    capacity.discovery_backends = {OpenDhtProxies{{"http://127.0.0.1:49412"}}};
     capacity.max_connections = 0;
     if (!rejects(capacity))
         return false;
@@ -29,7 +29,7 @@ bool rejects_invalid_configuration(Executor executor) {
     capacity.max_connections = 10;
     auto valid = Node::create(capacity, executor);
     DiscoveryConfig several;
-    several.browser_backends = {OpenDhtProxies{{"https://one.example", "https://two.example"}},
+    several.discovery_backends = {OpenDhtProxies{{"https://one.example", "https://two.example"}},
                                 NostrRelay{"wss://relay.example"},
                                 MqttBroker{"wss://broker.example/mqtt"},
                                 PeerJsServer{"wss://peers.example/peerjs"}};
@@ -39,7 +39,7 @@ bool rejects_invalid_configuration(Executor executor) {
 }
 bool imports_identity(Executor executor) {
     DiscoveryConfig config;
-    config.browser_backends = {OpenDhtProxies{{"http://127.0.0.1:49412"}}};
+    config.discovery_backends = {OpenDhtProxies{{"http://127.0.0.1:49412"}}};
     Bytes signing(32, std::byte{3}), recipient(32, std::byte{4});
     auto bad = Node::create_with_identity(config, executor, {}, recipient);
     if (!std::holds_alternative<CryptoError>(bad))
@@ -71,7 +71,7 @@ struct BrowserProbe : std::enable_shared_from_this<BrowserProbe> {
     void cancel();
     DiscoveryConfig config() const {
         DiscoveryConfig value;
-        value.browser_backends = {OpenDhtProxies{{"http://127.0.0.1:49412"}}};
+        value.discovery_backends = {OpenDhtProxies{{"http://127.0.0.1:49412"}}};
         return value;
     }
 };
