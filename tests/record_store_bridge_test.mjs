@@ -159,10 +159,16 @@ test("operation count is bounded and synchronous backend failures release their 
     broken.close(other);
 });
 
-test("a store over several proxies takes them newline-separated", () => {
+test("stores take their backends as a JSON list, and close them", () => {
     const bridge = createRecordBridge(() => true);
-    const id = bridge.create("https://one.example\nhttps://two.example", {});
+    const id = bridge.create(JSON.stringify([{ kind: "opendht", urls: ["https://one.example", "https://two.example"] }]), {});
     assert.equal(bridge.stores.get(id).origin, "https://one.example");
     assert.equal(bridge.stores.get(id).proxy.proxies.length, 2);
-    assert.throws(() => bridge.create("https://one.example\nftp://two.example", {}), TypeError);
+    const relay = bridge.create(JSON.stringify([{ kind: "nostr", url: "wss://relay.example" }]), {});
+    assert.equal(bridge.stores.get(relay).origin, null, "WebSocket backends carry every watch on one connection");
+    let closed = false;
+    bridge.stores.get(relay).proxy.close = () => { closed = true; };
+    bridge.close(relay);
+    assert.equal(closed, true);
+    assert.throws(() => bridge.create("https://one.example", {}), TypeError);
 });

@@ -10,7 +10,7 @@ int main() {
     p2pdc::Runtime runtime;
     p2pdc::DiscoveryConfig config;
     config.bootstrap_servers.push_back({"127.0.0.1", 4222});
-    config.browser_proxy_urls.push_back("http://127.0.0.1:4223");
+    config.browser_backends.push_back(p2pdc::OpenDhtProxies{{"http://127.0.0.1:4223"}});
     std::array<std::byte, 32> signing_seed{}, recipient_secret{};
     signing_seed.fill(std::byte{1});
     recipient_secret.fill(std::byte{2});

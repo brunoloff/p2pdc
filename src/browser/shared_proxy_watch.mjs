@@ -20,15 +20,16 @@ export class SharedProxyWatch {
                  close: () => this.remove(group, member) };
     }
     create(identity, origin, proxy, key) {
+        // A null origin is a backend that multiplexes watches, with no connection budget.
         const group = { identity, origin, members: new Set(), controller: new AbortController(), subscription: null,
-                        streamed: (this.streams.get(origin) || 0) < this.maxStreams };
+                        streamed: origin === null || (this.streams.get(origin) || 0) < this.maxStreams };
         const emit = (record) => {
             for (const member of [...group.members])
                 if (member.active) member.onRecord(record);
         };
         group.subscription = group.streamed ? new FallbackProxyWatch(proxy, key, emit, this.cache, this.interval, group.controller.signal) :
             new PollingProxyWatch(proxy, key, emit, this.cache, this.interval);
-        if (group.streamed) this.streams.set(origin, (this.streams.get(origin) || 0) + 1);
+        if (group.streamed && origin !== null) this.streams.set(origin, (this.streams.get(origin) || 0) + 1);
         this.groups.set(identity, group);
         return group;
     }
@@ -38,7 +39,7 @@ export class SharedProxyWatch {
         group.members.delete(member);
         if (group.members.size) return;
         if (this.groups.get(group.identity) === group) this.groups.delete(group.identity);
-        if (group.streamed) {
+        if (group.streamed && group.origin !== null) {
             const remaining = this.streams.get(group.origin) - 1;
             if (remaining) this.streams.set(group.origin, remaining); else this.streams.delete(group.origin);
         }

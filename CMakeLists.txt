@@ -59,6 +59,7 @@ add_library(p2pdc
     src/discovery/native_publisher.cpp
     src/discovery/native_signal_pipe.cpp
     src/discovery/record_store.cpp
+    src/discovery/browser_backends.cpp
     src/discovery/subscription.cpp
     src/discovery/signaling_queue.cpp
     src/protocol/frame.cpp
@@ -81,8 +82,12 @@ else()
     target_sources(p2pdc PRIVATE src/browser/wasm_runtime.cpp src/browser/browser_record_store.cpp src/browser/browser_transport.cpp)
     target_compile_options(p2pdc PUBLIC -fexceptions)
     set(p2pdc_proxy_sources
-        src/browser/proxy_codec.mjs src/browser/proxy_stream.mjs
+        src/browser/proxy_codec.mjs src/browser/proxy_stream.mjs src/browser/store_limits.mjs
         src/browser/opendht_proxy.mjs src/browser/failover_proxy.mjs
+        src/browser/websocket_channel.mjs src/browser/schnorr.mjs src/browser/nostr_relay.mjs
+        src/browser/mqtt_codec.mjs src/browser/mqtt_broker.mjs
+        src/browser/peerjs_socket.mjs src/browser/peerjs_host.mjs src/browser/peerjs_switchboard.mjs
+        src/browser/fan_out_store.mjs src/browser/discovery_backends.mjs
         src/browser/polling_proxy_watch.mjs src/browser/fallback_proxy_watch.mjs
         src/browser/shared_proxy_watch.mjs src/browser/record_store_bridge.mjs
         src/browser/record_store_prelude.js)
@@ -92,7 +97,7 @@ else()
         file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${p2pdc_source}" p2pdc_proxy_part)
         string(REGEX REPLACE "(^|\n)import [^\n]*\n" "\n" p2pdc_proxy_part "${p2pdc_proxy_part}")
         string(REGEX REPLACE "export \\{[^\n]*\n" "" p2pdc_proxy_part "${p2pdc_proxy_part}")
-        string(REGEX REPLACE "(^|\n)export (async function|function|class) " "\\1\\2 "
+        string(REGEX REPLACE "(^|\n)export (async function|function|class|const) " "\\1\\2 "
             p2pdc_proxy_part "${p2pdc_proxy_part}")
         if(p2pdc_proxy_part MATCHES "(^|\n)[ \t]*(import|export)[ \t]")
             message(FATAL_ERROR "Unsupported module syntax in ${p2pdc_source}; update the browser bundle")
@@ -278,6 +283,7 @@ if(BUILD_TESTING)
         target_compile_options(p2pdc_browser_record_native_peer PRIVATE ${p2pdc_warning_flags})
     endif()
     add_executable(p2pdc_tests
+        tests/browser_backends_test.cpp
         tests/callback_gate_test.cpp
         tests/backend_drain_test.cpp
         tests/deferred_events_test.cpp

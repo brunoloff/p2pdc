@@ -1,7 +1,6 @@
-import { OpenDhtProxy } from "./opendht_proxy.mjs";
 import { isTransientProxyError } from "./proxy_codec.mjs";
 
-const maxFailoverProxies = 8; // as browser_record_store.cpp allows
+const maxFailoverProxies = 8; // as discovery_config.cpp allows
 
 // A failure another proxy may not have: unreachable, timed out, or HTTP 408, 429 or 5xx. A
 // stream the proxy ended is not one; watchers reconnect to the same proxy.
@@ -21,6 +20,7 @@ export class FailoverProxy {
         this.proxies = proxies.slice();
         this.current = 0;
     }
+    close() { for (const proxy of this.proxies) proxy.close?.(); }
     failed(index, error) {
         if (index === this.current && switchable(error)) this.current = (index + 1) % this.proxies.length;
     }
@@ -45,12 +45,4 @@ export class FailoverProxy {
         subscription.done.catch((error) => this.failed(index, error));
         return subscription;
     }
-}
-
-// The proxies named by newline-separated URLs, as browser_record_store.cpp passes them.
-export function proxyFromUrls(text, limits) {
-    const urls = String(text).split("\n");
-    if (urls.length > maxFailoverProxies) throw new TypeError("too many proxies");
-    const proxies = urls.map((url) => new OpenDhtProxy(url, limits));
-    return proxies.length === 1 ? proxies[0] : new FailoverProxy(proxies);
 }

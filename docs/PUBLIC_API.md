@@ -88,14 +88,17 @@ discovery; it does not authorize a particular peer.
 ```cpp
 p2pdc::DiscoveryConfig config;
 config.bootstrap_servers.push_back({"bootstrap.example.org", 4222});
-config.browser_proxy_urls.push_back("https://proxy.example.org");
+config.browser_backends.push_back(p2pdc::OpenDhtProxies{{"https://proxy.example.org"}});
 auto node = p2pdc::Node::create(config, executor);
 ```
 
 Replace these illustrative addresses with services you operate or are
 authorized to use. Native discovery uses OpenDHT bootstrap settings and
-ignores browser proxy URLs. WebAssembly currently requires exactly one
-browser-accessible HTTPS OpenDHT proxy; HTTP loopback is allowed for tests.
+ignores browser backends. WebAssembly takes 1 to 8 browser backends, used all
+at once: OpenDHT proxies (with failover between proxies into the same DHT), Nostr
+relays, MQTT 5 brokers and PeerJS servers; `parse_browser_backend()` reads the
+one-line form for settings (see [DISCOVERY_BACKENDS.md](DISCOVERY_BACKENDS.md)).
+HTTP and WS loopback addresses are allowed for tests.
 Peers must use the same DHT network ID. The library does not select public
 servers for you.
 
@@ -291,7 +294,7 @@ changes promised by the current API:
 - Typed errors are useful, but diagnostics and timings for discovery,
   signaling, ICE, and authentication would make slow or failed connections
   easier to understand.
-- A built-in bounded send queue, optional disposable messages, proxy failover,
-  and a credential provider would cover common application needs.
+- A built-in bounded send queue, optional disposable messages and a credential
+  provider would cover common application needs.
 - A curated top-level header and installed package could make the intended
   application interface easier to distinguish from lower-level protocol tools.

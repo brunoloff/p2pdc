@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FailoverProxy, proxyFromUrls } from "../src/browser/failover_proxy.mjs";
-import { OpenDhtProxy } from "../src/browser/opendht_proxy.mjs";
+import { FailoverProxy } from "../src/browser/failover_proxy.mjs";
 import { ProxyError } from "../src/browser/proxy_codec.mjs";
 
 const key = Uint8Array.from({ length: 20 }, (_, index) => index + 1);
@@ -93,12 +92,8 @@ test("an ended watch stream does not move on", async () => {
     assert.deepEqual(second.calls, []);
 });
 
-test("proxyFromUrls takes newline-separated URLs and checks each", () => {
-    assert.ok(proxyFromUrls("https://one.example", {}) instanceof OpenDhtProxy);
-    const several = proxyFromUrls("https://one.example\nhttps://two.example/base", {});
-    assert.ok(several instanceof FailoverProxy);
-    assert.equal(several.proxies.length, 2);
-    assert.throws(() => proxyFromUrls("https://one.example\nhttp://two.example", {}), TypeError);
-    assert.throws(() => proxyFromUrls(Array(9).fill("https://one.example").join("\n"), {}), TypeError);
+test("a failover proxy needs between one and eight proxies", () => {
     assert.throws(() => new FailoverProxy([]), TypeError);
+    assert.throws(() => new FailoverProxy(Array(9).fill(scripted("x"))), TypeError);
+    assert.doesNotThrow(() => new FailoverProxy([scripted("x")]));
 });

@@ -39,7 +39,7 @@ export function encodeBase64(bytes) {
 
 // Oversized payloads are untrusted DHT data, not proxy faults: callers drop
 // records that fail with "oversized_record" and keep the operation running.
-function decodeBase64(value, maxBytes) {
+export function decodeBase64(value, maxBytes) {
     if (typeof value !== "string" ||
         !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
         throw new ProxyError("invalid_record", "invalid base64 payload");

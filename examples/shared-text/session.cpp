@@ -113,7 +113,7 @@ void Session::start(const QString &capability, const QString &bootstrap, int por
         config.bootstrap_servers.push_back(
             {bootstrap.toStdString(), static_cast<std::uint16_t>(port)});
     if (!proxy.isEmpty())
-        config.browser_proxy_urls.push_back(proxy.toStdString());
+        config.browser_backends.push_back(p2pdc::OpenDhtProxies{{proxy.toStdString()}});
     ice_ = makeIce(stunHost, stunPort, turnHost, turnPort, turnUser, turnPassword, turnTransport);
     try {
         node_ = Node::create(std::move(config), executor());

@@ -44,9 +44,10 @@ inline bool public_handles_link() {
 inline bool portable_configuration() {
     DiscoveryConfig config;
     config.bootstrap_servers = {{"bootstrap.example", 4222}};
-    config.browser_proxy_urls = {"https://proxy.example"};
+    config.browser_backends = {p2pdc::OpenDhtProxies{{"https://proxy.example"}}};
     return config.bootstrap_servers.front().host == "bootstrap.example" &&
-           config.browser_proxy_urls.front() == "https://proxy.example";
+           config.browser_backends.front() ==
+               p2pdc::BrowserBackend(p2pdc::OpenDhtProxies{{"https://proxy.example"}});
 }
 
 struct RuntimeConsumer : std::enable_shared_from_this<RuntimeConsumer> {

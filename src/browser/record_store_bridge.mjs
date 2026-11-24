@@ -1,4 +1,4 @@
-import { proxyFromUrls } from "./failover_proxy.mjs";
+import { createBackendStore } from "./discovery_backends.mjs";
 import { isTransientProxyError, keyHex } from "./proxy_codec.mjs";
 import { SharedProxyWatch } from "./shared_proxy_watch.mjs";
 
@@ -16,9 +16,10 @@ class RecordBridge {
     }
     create(url, limits) {
         if (this.next > 0xffffffff) throw new RangeError("store identifiers exhausted");
-        // Several proxies arrive newline-separated; watch streams count against the first's origin.
+        // url is the JSON backend list; WebSocket backends carry every watch on one connection,
+        // while streaming HTTP watches count against their origin's budget.
         const proxy = this.createProxy(url, limits), id = this.next++;
-        this.stores.set(id, { proxy, origin: new URL(url.split("\n")[0]).origin,
+        this.stores.set(id, { proxy, origin: proxy.streamOrigin ?? null,
                               identity: JSON.stringify([url, limits]), operations: new Map() });
         return id;
     }
@@ -102,9 +103,10 @@ class RecordBridge {
         if (!store) return;
         for (const operation of store.operations.keys()) this.cancel(id, operation);
         this.stores.delete(id);
+        store.proxy.close?.();
     }
 }
 
-export function createRecordBridge(deliver, createProxy = proxyFromUrls) {
+export function createRecordBridge(deliver, createProxy = createBackendStore) {
     return new RecordBridge(createProxy, deliver);
 }

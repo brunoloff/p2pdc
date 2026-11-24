@@ -1,0 +1,121 @@
+# Browser discovery backends
+
+Browsers cannot join the DHT, so a browser node finds peers, and exchanges connection
+offers, through servers it can reach over HTTPS or WebSocket. This document describes how
+p2pdc lets an application choose those servers, and the four kinds it supports.
+
+## What every backend provides
+
+All of discovery (advertisement leases, discovery watches, mailboxes and incoming
+listeners) runs on one interface, the record store (`src/discovery/record_store.hpp`):
+
+- **put(key, value):** keep a small value under a 20-byte key for a while (ten minutes);
+- **lookup(key):** every current value under the key, from any number of writers;
+- **watch(key):** be told about values put under the key from now on.
+
+Values are opaque to the backend: p2pdc signs, encrypts and checks them itself, and treats
+whatever a backend returns as untrusted. A backend must only keep values long enough, hand
+them to anyone who asks for the key, and push new ones to watchers.
+
+In the browser the record store is implemented in JavaScript (`src/browser/`), by objects
+with three methods, the **record backend** contract:
+
+```js
+put(key, value, signal)            // Promise; resolves once stored
+get(key, signal, { deduplicateByContent }) // Promise<[{ bytes, expired, id }]>
+listen(key, onRecord, signal)      // { ready: Promise<boolean>, done: Promise, close() }
+```
+
+`key` is a 20-byte `Uint8Array`; `value` and `bytes` are `Uint8Array`s; `id` is a string that
+identifies a value within its backend. Failures reject with a `ProxyError` whose code says
+whether trying again, or elsewhere, may help (`isTransientProxyError`).
+
+## The four backends
+
+| Backend | Server | put | lookup | watch |
+|---|---|---|---|---|
+| OpenDHT proxies | HTTPS proxies into one DHT; failover between them | POST a value | GET the key | streaming GET |
+| Nostr relay | one `wss://` relay (NIP-01) | publish a signed event tagged with the key, expiring (NIP-40) | REQ with the tag until EOSE | REQ kept open |
+| MQTT broker | one MQTT 5 broker over `wss://` | publish a retained message to a topic of its own under the key, expiring | subscribe and collect the retained messages | subscription kept open |
+| PeerJS server | one PeerJS server (`wss://`), which only forwards messages between IDs | send to the key's host | ask the key's host | ask the key's host to forward new values |
+
+**Nostr:** events are kind 30078 (application data), with a `d` tag naming the value, an
+`x` tag holding the key in hex and an `expiration` tag. Each store signs with a throwaway
+secp256k1 key (BIP340 Schnorr, `schnorr.mjs`): relays require a signature, while p2pdc's own
+signature inside the value is the one peers check.
+
+**MQTT:** each value is a retained message on `p2pdc/v1/<key hex>/<value id>` with a message
+expiry interval; a lookup subscribes to `p2pdc/v1/<key hex>/+` and collects what arrives
+until the broker goes quiet.
+
+**PeerJS:** the server stores nothing and cannot list who is connected; it forwards messages
+to an ID while that ID is connected. So each key gets a host: the first store that registers
+the PeerJS ID derived from the key keeps that key's values in memory, answers lookups and
+forwards new values to watchers. Others get `ID-TAKEN` and send their requests to that ID.
+When the host leaves, its ID becomes free; the next store to need the key registers it and
+becomes the host, and every store puts its own current values again. Values are lost with a
+host that leaves only until their writers' next put, which leases do well within their
+lifetime.
+
+## Servers, as tested
+
+Live tests (November 2026) found these differences between public servers:
+
+- **Nostr:** nos.lol, relay.primal.net, nostr.mom and relay.snort.social keep, find and push
+  values; relay.damus.io and relay.snort.social sometimes refuse new connections from an
+  address that opened many, and relay.nostr.band did not answer. Relays also replay events
+  from the second a watch began (NIP-01 `since` is inclusive), so watches may hear a value
+  twice; p2pdc deduplicates values anyway.
+- **MQTT:** the broker must keep retained messages. test.mosquitto.org and broker.hivemq.com
+  do; broker.emqx.io acknowledged puts with reason 0x10 but replayed nothing, so lookups
+  there find only values put while watching. A backend cannot tell from the acknowledgment.
+- **PeerJS:** the public 0.peerjs.com registers IDs but forwards only messages shaped like a
+  genuine PeerJS WebRTC offer, and drops everything else, so p2pdc does not use it; run
+  your own `peerjs-server`, which forwards any message.
+
+Each store keeps one connection per server, shared with every other store of the page that
+uses the same server (`discovery_backends.mjs`): p2pdc creates a store per space and per
+connection attempt, and servers limit how many connections one address may open.
+
+## Several meeting places at once
+
+Each backend entry is a separate meeting place: two nodes meet only through a backend that
+both use and can reach. OpenDHT proxies into the same DHT are one meeting place, so one entry
+lists them all and the store fails over between them. Separate entries are used **all at
+once** (`fan_out_store.mjs`), not one after another, because a node that falls back to
+another meeting place would no longer meet the nodes that stayed:
+
+- a put goes to every backend and succeeds when one does;
+- a lookup asks every backend and merges the answers; once one has answered it waits a
+  little for the others, so a blocked backend does not slow discovery down;
+- a watch watches every backend; one that fails is watched again after a backoff while the
+  others carry on.
+
+## Choosing backends
+
+`DiscoveryConfig::browser_backends` lists the entries, as a variant of `OpenDhtProxies`,
+`NostrRelay`, `MqttBroker` and `PeerJsServer` (`p2pdc/browser_backends.h`). For settings typed by people, each entry also
+has a one-line form that `parse_browser_backend()` reads and `to_string()` writes:
+
+```text
+opendht https://dhtproxy.jami.net https://proxy.example
+nostr wss://relay.damus.io
+mqtt wss://broker.example/mqtt
+peerjs wss://0.peerjs.com/peerjs?key=peerjs
+```
+
+Enabling, disabling or switching a backend is adding, removing or replacing an entry. Native
+nodes use the DHT directly and ignore browser backends.
+
+## Testing
+
+- Unit tests (`node --test tests/*_test.mjs`) run each backend against a small in-process
+  server written for the tests (`tests/support/`): a WebSocket server, a Nostr relay, an
+  MQTT 5 broker and a PeerJS server. They cover put, lookup, watch, expiry, limits,
+  reconnection and failure codes, and the fan-out store's merging and failure handling.
+- BIP340 signing is checked against the official test vectors.
+- Live tests (`tests/discovery_backends_live_test.mjs`, opt-in through
+  `P2PDC_TEST_NOSTR_RELAYS`, `P2PDC_TEST_MQTT_BROKERS` and `P2PDC_TEST_PEERJS_SERVERS`) run
+  put, lookup and watch between two clients against public servers.
+- End to end, two browser users of PeerChalk, each given one backend only, found each
+  other and connected through a Nostr relay, an MQTT broker and a PeerJS server.

@@ -1,5 +1,6 @@
 import { ProxyError, decodeRecordOrDrop, encodeBase64, keyHex } from "./proxy_codec.mjs";
 import { readLines } from "./proxy_stream.mjs";
+import { rateGate, storeLimits } from "./store_limits.mjs";
 export { ProxyError } from "./proxy_codec.mjs";
 
 function proxyBase(value) {
@@ -11,23 +12,6 @@ function proxyBase(value) {
     }
     url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
     return url;
-}
-function bounds(options) {
-    const result = { maxValueBytes: options.maxValueBytes ?? 32768,
-                     maxValues: options.maxValues ?? 512,
-                     maxTotalBytes: options.maxTotalBytes ?? 1048576,
-                     timeoutMs: options.timeoutMs ?? 10000,
-                     listenIdleMs: options.listenIdleMs ?? 300000,
-                     maxRecordsPerSecond: options.maxRecordsPerSecond ?? 256 };
-    for (const value of Object.values(result)) {
-        if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError("invalid proxy limits");
-    }
-    if (result.maxValueBytes > 32768 || result.maxValues > 1024 ||
-        result.maxTotalBytes > 16 * 1024 * 1024 || result.timeoutMs > 600000 ||
-        result.listenIdleMs > 3600000 || result.maxRecordsPerSecond > 65536) {
-        throw new TypeError("proxy limits exceed supported bounds");
-    }
-    return result;
 }
 function requestScope(parent, timeoutMs) {
     const controller = new AbortController();
@@ -53,16 +37,6 @@ function checkResponse(response, scope) {
     return response;
 }
 function lineLimit(maxValueBytes) { return 4 * Math.ceil(maxValueBytes / 3) + 4096; }
-// Admits at most perSecond records per one-second window; the rest are dropped
-// so a hostile proxy cannot flood the WebAssembly heap through one stream.
-function rateGate(perSecond) {
-    let start = performance.now(), count = 0;
-    return () => {
-        const now = performance.now();
-        if (now - start >= 1000) { start = now; count = 0; }
-        return ++count <= perSecond;
-    };
-}
 function requestError(error, scope) {
     return scope.timedOut() ? new ProxyError("timeout", "proxy request timed out") : error;
 }
@@ -83,7 +57,7 @@ async function cancelResponse(body, signal) {
 export class OpenDhtProxy {
     constructor(url, options = {}) {
         this.base = proxyBase(url);
-        this.limits = bounds(options);
+        this.limits = storeLimits(options);
         const fetcher = options.fetch ?? globalThis.fetch;
         if (typeof fetcher !== "function") throw new TypeError("fetch is required");
         this.fetch = options.fetch == null ? fetcher.bind(globalThis) : fetcher;
