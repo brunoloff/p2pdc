@@ -117,16 +117,20 @@ another meeting place would no longer meet the nodes that stayed:
 
 ## In native nodes
 
-Native nodes join the DHT themselves and, beside it, use every Nostr relay and MQTT broker of
-their backend list, all at once with the same rules (`src/backends/`). OpenDHT entries are
-skipped: they name HTTPS proxies into the DHT that a native node has no need for. PeerJS
-entries are not used by native nodes yet.
+Native nodes join the DHT themselves and, beside it, use every Nostr relay, MQTT broker and
+PeerJS server of their backend list, all at once with the same rules (`src/backends/`).
+OpenDHT entries are skipped: they name HTTPS proxies into the DHT that a native node has no
+need for.
 
 The protocol layers are ports of the JavaScript ones, one C++ file per module:
 `socket_channel.cpp` (`websocket_channel.mjs`), `nostr_event.cpp` and `nostr_relay.cpp`
 (`nostr_relay.mjs`), `mqtt_codec.cpp` (`mqtt_codec.mjs`), `mqtt_broker.cpp`
 (`mqtt_broker.mjs`), `backend_records.cpp` (`store_limits.mjs`) and `fan_out_store.cpp` with
-`fan_out_watch.cpp` (`fan_out_store.mjs`). `network_backends.cpp` plays the part of
+`fan_out_watch.cpp` (`fan_out_store.mjs`). PeerJS is `peerjs_socket.cpp`, `peerjs_link.cpp`,
+`peerjs_endpoint.cpp`, `peerjs_host.cpp` and `peerjs_switchboard*.cpp`, with the same IDs,
+signalling and record protocol as the JavaScript, on libdatachannel's `PeerConnection` and
+`DataChannel` with the PeerJS client's ICE servers; a browser and a native node can be each
+other's key host. `network_backends.cpp` plays the part of
 `discovery_backends.mjs`: one client per server and node, shared by every store.
 
 - **Threads.** All clients of a node run on one thread of their own (`backend_loop.cpp`), as
@@ -192,10 +196,15 @@ entry, since they join the DHT itself.
   (`tests/support/serve_backends.mjs`) and cover the native clients the same way: put, lookup,
   watch, limits, refusals, reconnection, a shared connection, and the fan-out store with fake
   stores. The browser's own clients, run by node, and the native ones read and hear each
-  other's values through each server.
+  other's values through each server (Nostr and MQTT; the browser's PeerJS client needs
+  WebRTC, which node lacks). The PeerJS tests (`peerjs_store_test.cpp`) run native stores
+  over real data connections through the strict test server: hosting, lookups and watches on
+  and away from the host, takeover when the host leaves, and a refused server key. The tests
+  also run under AddressSanitizer.
 - `p2pdc_network_node_tests` runs two native nodes, each alone in a DHT of its own, that find
-  each other, connect and echo through a Nostr relay, through an MQTT broker, and through a
-  broker beside an unreachable relay; without a shared backend they do not meet.
+  each other, connect and echo through a Nostr relay, through an MQTT broker, through a PeerJS
+  server, and through a broker beside an unreachable relay; without a shared backend they do
+  not meet.
 - Native live tests (`p2pdc_backend_live_tests`, opt-in through the same variables as the
   JavaScript ones) run put, lookup and watch between two native clients against public
   servers.

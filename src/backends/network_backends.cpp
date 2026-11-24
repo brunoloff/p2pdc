@@ -6,6 +6,7 @@
 #include "fan_out_store.hpp"
 #include "mqtt_broker.hpp"
 #include "nostr_relay.hpp"
+#include "peerjs_switchboard.hpp"
 
 #include <future>
 #include <iostream>
@@ -31,9 +32,8 @@ std::shared_ptr<RecordClient> client_for(const DiscoveryBackend &entry,
         std::shared_ptr<RecordClient> operator()(const ::p2pdc::MqttBroker &value) const {
             return MqttBroker::create(loop, value.url);
         }
-        // Native PeerJS support is still to come; until then these entries go unused.
-        std::shared_ptr<RecordClient> operator()(const ::p2pdc::PeerJsServer &) const {
-            return nullptr;
+        std::shared_ptr<RecordClient> operator()(const ::p2pdc::PeerJsServer &value) const {
+            return PeerJsSwitchboard::create(loop, value.url, value.key);
         }
     };
     return std::visit(Maker{loop}, entry);

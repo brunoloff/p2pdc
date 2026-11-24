@@ -98,8 +98,8 @@ authorized to use. Discovery backends are used all at once: OpenDHT proxies
 and PeerJS servers; `parse_discovery_backend()` reads the one-line form for
 settings (see [DISCOVERY_BACKENDS.md](DISCOVERY_BACKENDS.md)). WebAssembly takes
 1 to 8 backends. Native nodes take 0 to 8: they join the DHT through the
-bootstrap settings, skip OpenDHT proxy entries, use Nostr relays and MQTT brokers
-beside the DHT, and do not use PeerJS servers yet; `Node::create` throws
+bootstrap settings, skip OpenDHT proxy entries, and use Nostr relays, MQTT brokers
+and PeerJS servers beside the DHT; `Node::create` throws
 `std::invalid_argument` for an invalid entry.
 HTTP and WS loopback addresses are allowed for tests.
 Peers must use the same DHT network ID. The library does not select public

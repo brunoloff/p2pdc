@@ -1,10 +1,12 @@
 // Opt-in tests against public servers, like tests/discovery_backends_live_test.mjs: set
-// P2PDC_TEST_NOSTR_RELAYS and P2PDC_TEST_MQTT_BROKERS to space-separated wss:// URLs, for
-// example "wss://nos.lol wss://relay.primal.net" and "wss://broker.hivemq.com:8884/mqtt".
+// P2PDC_TEST_NOSTR_RELAYS, P2PDC_TEST_MQTT_BROKERS and P2PDC_TEST_PEERJS_SERVERS to
+// space-separated wss:// URLs, for example "wss://nos.lol wss://relay.primal.net",
+// "wss://broker.hivemq.com:8884/mqtt" and "wss://0.peerjs.com/peerjs#peerjs" (URL#key).
 #include "../src/backends/backend_loop.hpp"
 #include "../src/backends/client_record_store.hpp"
 #include "../src/backends/mqtt_broker.hpp"
 #include "../src/backends/nostr_relay.hpp"
+#include "../src/backends/peerjs_switchboard.hpp"
 #include "store_sync.hpp"
 
 #include <gtest/gtest.h>
@@ -39,7 +41,8 @@ void exchange(
     EXPECT_EQ(put(writer, key, bytes({1, 2, 3})), true);
     const auto found = lookup(watcher, key);
     ASSERT_TRUE(found);
-    EXPECT_EQ(found->batch.values, std::vector<Bytes>{bytes({1, 2, 3})});
+    EXPECT_EQ(found->batch.values, std::vector<Bytes>{bytes({1, 2, 3})})
+        << "error " << (found->batch.error ? static_cast<int>(*found->batch.error) : -1);
     Heard heard;
     auto result = watcher.watch(key, heard.callback(), false);
     ASSERT_EQ(registered(std::get<RecordWatch>(result)), 1U);
@@ -74,5 +77,18 @@ TEST(NetworkStoreLive, MqttBrokers) {
     for (const auto &url : urls) {
         SCOPED_TRACE(url);
         exchange([&](auto loop) { return MqttBroker::create(loop, url); });
+    }
+}
+
+TEST(NetworkStoreLive, PeerJsServers) {
+    const auto specs = servers("P2PDC_TEST_PEERJS_SERVERS");
+    if (specs.empty())
+        GTEST_SKIP() << "set P2PDC_TEST_PEERJS_SERVERS";
+    for (const auto &spec : specs) {
+        SCOPED_TRACE(spec);
+        const auto hash = spec.find('#');
+        const auto url = spec.substr(0, hash);
+        const auto key = hash == std::string::npos ? std::string("peerjs") : spec.substr(hash + 1);
+        exchange([&](auto loop) { return PeerJsSwitchboard::create(loop, url, key); });
     }
 }

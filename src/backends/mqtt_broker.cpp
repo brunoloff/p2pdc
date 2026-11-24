@@ -224,8 +224,8 @@ RecordClient::WatchId MqttBroker::listen(const RecordKey &key, StoreLimits limit
     return watch->id;
 }
 
-void MqttBroker::end_watch(const std::shared_ptr<WatchState> &watch,
-                           std::optional<BackendFailure> failure, bool tell) {
+void MqttBroker::end_watch(std::shared_ptr<WatchState> watch, std::optional<BackendFailure> failure,
+                           bool tell) {
     if (std::exchange(watch->ended, true))
         return;
     watches_.erase(watch->id);

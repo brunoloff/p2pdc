@@ -48,6 +48,13 @@ TEST(NativeNetworkNode, NodesMeetAndConnectThroughAnMqttBroker) {
     EXPECT_GT(servers.command("stats")["mqttRetained"], 0);
 }
 
+TEST(NativeNetworkNode, NodesMeetAndConnectThroughAPeerJsServer) {
+    p2pdc::test::BackendServers servers;
+    const auto [success, reason] = echo_through({PeerJsServer{servers.peerjs, "peerjs"}});
+    EXPECT_TRUE(success) << reason;
+    EXPECT_EQ(servers.command("stats")["peerjsDropped"], 0);
+}
+
 TEST(NativeNetworkNode, NodesMeetThroughAnyBackendTheyShare) {
     p2pdc::test::BackendServers servers;
     // An unreachable relay beside a working broker: the fan-out store carries on without it.

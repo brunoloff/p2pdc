@@ -1,4 +1,4 @@
-# Native network discovery backends: Nostr relays and MQTT brokers over WebSocket
+# Native network discovery backends: Nostr relays, MQTT brokers and PeerJS servers over WebSocket
 # (docs/DISCOVERY_BACKENDS.md). They need libdatachannel built with WebSocket support,
 # libsecp256k1 for Nostr's signatures and nlohmann/json; deps/ builds all three.
 if(P2PDC_ENABLE_NATIVE_TRANSPORT AND P2PDC_ENABLE_OPENDHT AND P2PDC_ENABLE_SODIUM AND NOT ANDROID)
@@ -36,6 +36,9 @@ target_sources(p2pdc PRIVATE
     src/backends/mqtt_codec.cpp src/backends/mqtt_broker.cpp
     src/backends/watch_delivery.cpp src/backends/client_record_store.cpp
     src/backends/fan_out_store.cpp src/backends/fan_out_watch.cpp
+    src/backends/peerjs_socket.cpp src/backends/peerjs_link.cpp src/backends/peerjs_endpoint.cpp
+    src/backends/peerjs_host.cpp src/backends/peerjs_switchboard.cpp
+    src/backends/peerjs_switchboard_link.cpp src/backends/peerjs_switchboard_ops.cpp
     src/backends/network_backends.cpp)
 target_compile_definitions(p2pdc PRIVATE P2PDC_HAVE_NETWORK_BACKENDS)
 target_link_libraries(p2pdc PRIVATE libsecp256k1::secp256k1 nlohmann_json::nlohmann_json)

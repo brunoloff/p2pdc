@@ -44,6 +44,8 @@ class BackendServers {
         nostr = urls.at("nostr").get<std::string>();
         mqtt = urls.at("mqtt").get<std::string>();
         untrusted = urls.at("untrusted").get<std::string>();
+        peerjs = urls.at("peerjs").get<std::string>();
+        silent_peerjs = urls.at("silentPeerjs").get<std::string>();
     }
     ~BackendServers() {
         fclose(input_); // the script exits when its input closes
@@ -64,6 +66,10 @@ class BackendServers {
     std::string mqtt;
     // A wss:// echo server with a self-signed certificate.
     std::string untrusted;
+    // A strict PeerJS server, which relays only genuine PeerJS signalling, with the key "peerjs".
+    std::string peerjs;
+    // The same, but closing connections for a taken ID without telling them so.
+    std::string silent_peerjs;
 
   private:
     nlohmann::json read() {

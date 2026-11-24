@@ -16,8 +16,10 @@ function genuine(message) {
     return true;
 }
 
-// delayAnswersMs holds ANSWERs back, so that candidates overtake them.
-export async function startPeerJsServer({ key = "peerjs", expireMs = 300, strict = true, delayAnswersMs = 0 } = {}) {
+// delayAnswersMs holds ANSWERs back, so that candidates overtake them. silentTaken closes a
+// connection for a taken ID without sending ID-TAKEN first, as 0.peerjs.com does at times.
+export async function startPeerJsServer({ key = "peerjs", expireMs = 300, strict = true, delayAnswersMs = 0,
+                                          silentTaken = false } = {}) {
     const clients = new Map(); // id -> { connection, token }
     const queued = new Map(); // dst -> [{ message, timer }]
     const peerjs = { clients, messages: 0, expired: 0, dropped: 0, types: new Map() };
@@ -41,7 +43,7 @@ export async function startPeerJsServer({ key = "peerjs", expireMs = 300, strict
         }
         const existing = clients.get(id);
         if (existing && existing.token !== token) {
-            connection.send(JSON.stringify({ type: "ID-TAKEN", payload: { msg: "ID is taken" } }));
+            if (!silentTaken) connection.send(JSON.stringify({ type: "ID-TAKEN", payload: { msg: "ID is taken" } }));
             connection.close(); return;
         }
         const client = { connection, token };

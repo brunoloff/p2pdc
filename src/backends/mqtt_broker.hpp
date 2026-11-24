@@ -42,7 +42,8 @@ class MqttBroker final : public RecordClient, public std::enable_shared_from_thi
     struct WatchState;
     void join(const std::string &hex, std::function<void(KeyEntry &)> add, bool lookup, Done done);
     void leave(const std::string &hex, std::uint64_t target);
-    void end_watch(const std::shared_ptr<WatchState> &watch, std::optional<BackendFailure> failure,
+    // By value: the watch may be the entry it erases.
+    void end_watch(std::shared_ptr<WatchState> watch, std::optional<BackendFailure> failure,
                    bool tell);
     void ping();
     std::uint16_t packet_id();

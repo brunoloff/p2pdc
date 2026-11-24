@@ -6,7 +6,7 @@ endif()
 find_program(P2PDC_TEST_NODE_EXECUTABLE node)
 add_executable(p2pdc_backend_tests tests/backend_unit_test.cpp tests/fan_out_store_test.cpp)
 if(P2PDC_TEST_NODE_EXECUTABLE AND UNIX)
-    target_sources(p2pdc_backend_tests PRIVATE tests/network_store_test.cpp)
+    target_sources(p2pdc_backend_tests PRIVATE tests/network_store_test.cpp tests/peerjs_store_test.cpp)
     target_compile_definitions(p2pdc_backend_tests PRIVATE
         "P2PDC_TEST_NODE=\"${P2PDC_TEST_NODE_EXECUTABLE}\"")
 else()

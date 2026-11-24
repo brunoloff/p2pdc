@@ -2,14 +2,16 @@
 
 ## Changes since 0.3.0
 
-- **Native nodes meet through Nostr relays and MQTT brokers too.** Besides joining
-  the DHT, a native node now uses the Nostr relays and MQTT 5 brokers of its backend
-  list, all at once with the same rules as browsers, so two people still meet when
-  one of them is on a network that blocks the DHT. A node keeps one connection per
-  server, shared by all its stores. OpenDHT proxy entries remain browser-only;
-  native nodes do not use PeerJS servers yet.
+- **Native nodes meet through Nostr relays, MQTT brokers and PeerJS servers too.**
+  Besides joining the DHT, a native node now uses the Nostr relays, MQTT 5 brokers
+  and PeerJS servers of its backend list, all at once with the same rules as
+  browsers, so two people still meet when one of them is on a network that blocks
+  the DHT. Native and browser nodes share PeerJS keys: either may host a key for the
+  other, over a WebRTC data connection. A node keeps one connection per server,
+  shared by all its stores. OpenDHT proxy entries remain browser-only.
 - New dependencies for native builds: libdatachannel built with WebSocket support,
-  libsecp256k1 0.7.0 (Nostr signatures) and nlohmann/json 3.12.0; `deps/` builds
+  libsecp256k1 0.7.0 (Nostr signatures) and nlohmann/json 3.12.0 (Nostr and PeerJS
+  messages); `deps/` builds
   them. `-DP2PDC_ENABLE_NETWORK_BACKENDS=OFF` builds without them.
 - **TLS on Windows:** libdatachannel does not check server certificates on Windows,
   so these connections are not authenticated there (see
