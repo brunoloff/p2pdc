@@ -94,7 +94,10 @@ Live tests (November 2026) found these differences between public servers:
   signalling and drops anything else. p2pdc sends nothing else, so it works there: two
   clients put, looked up and watched values through it, and a host's leaving handed the key
   to a watcher, which then heard new values. A self-hosted `peerjs-server` works the same
-  way.
+  way. Two native clients did the same through it (eight runs in a row). When a key's ID is
+  taken, 0.peerjs.com sometimes closes the second connection before its `ID-TAKEN` reaches
+  libdatachannel; native stores take a claim that fails that way to mean the key is hosted
+  elsewhere, and claim it again if the server then expires their offer.
 
 Each store keeps one connection per server, shared with every other store of the page (or
 native node) that uses the same server (`discovery_backends.mjs`, `network_backends.cpp`):
@@ -199,8 +202,10 @@ entry, since they join the DHT itself.
   other's values through each server (Nostr and MQTT; the browser's PeerJS client needs
   WebRTC, which node lacks). The PeerJS tests (`peerjs_store_test.cpp`) run native stores
   over real data connections through the strict test server: hosting, lookups and watches on
-  and away from the host, takeover when the host leaves, and a refused server key. The tests
-  also run under AddressSanitizer.
+  and away from the host, takeover when the host leaves, a refused server key, and a server
+  that closes taken IDs without saying so. With `P2PDC_TEST_CHROMIUM` set, a browser client in
+  headless Chromium and a native store host keys for each other, each reading, writing and
+  watching through the other. The tests also run under AddressSanitizer.
 - `p2pdc_network_node_tests` runs two native nodes, each alone in a DHT of its own, that find
   each other, connect and echo through a Nostr relay, through an MQTT broker, through a PeerJS
   server, and through a broker beside an unreachable relay; without a shared backend they do
