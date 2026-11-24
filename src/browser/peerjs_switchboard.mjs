@@ -121,7 +121,7 @@ export class PeerJsSwitchboard {
         const values = [...(this.own.get(hex) ?? [])];
         if (!values.length) return;
         this.withHost(hex, () => {}, async () => {
-            for (const [id, { data }] of values) await this.ask(hex, { op: "put", id, data }, null, this.limits.timeoutMs);
+            for (const [id, value] of values) await this.ask(hex, { op: "put", id, data: value.data }, null, this.limits.timeoutMs);
         }).catch((error) => console.warn("p2pdc: could not put values again on the key's new PeerJS host", error));
     }
     async ask(hex, message, signal, timeoutMs) {

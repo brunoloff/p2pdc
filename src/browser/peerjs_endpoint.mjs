@@ -23,8 +23,9 @@ function sessionDescription(value, type) {
 function iceCandidate(value) {
     if (!value || typeof value.candidate !== "string" || value.candidate.length > maxCandidateChars)
         throw new ProxyError("network_error", "invalid ICE candidate from the peer");
-    const { candidate, sdpMid = null, sdpMLineIndex = null, usernameFragment = null } = value;
-    return { candidate, sdpMid, sdpMLineIndex, usernameFragment };
+    // Emscripten's JS optimizer, which bundles this file, rejects destructuring defaults.
+    return { candidate: value.candidate, sdpMid: value.sdpMid ?? null, sdpMLineIndex: value.sdpMLineIndex ?? null,
+             usernameFragment: value.usernameFragment ?? null };
 }
 
 // One data connection being set up with peer, as the PeerJS client does: the offerer creates
