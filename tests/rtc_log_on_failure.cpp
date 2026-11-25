@@ -1,4 +1,4 @@
-// Keeps libdatachannel's debug log for the test that is running and prints it only when that
+// Keeps libdatachannel's verbose log for the test that is running and prints it only when that
 // test fails, so a connection that does not come up on some runner shows why.
 #include <gtest/gtest.h>
 #include <rtc/global.hpp>
@@ -10,7 +10,7 @@
 #include <string>
 
 namespace {
-constexpr std::size_t max_lines = 4000;
+constexpr std::size_t max_lines = 6000;
 
 // Never freed: libdatachannel's threads may still log while the process exits.
 struct Lines {
@@ -47,7 +47,7 @@ void keep(rtc::LogLevel level, std::string message) {
 // Registered before main() runs; gtest owns the listener from then on.
 [[maybe_unused]] const bool registered = [] {
     ::testing::UnitTest::GetInstance()->listeners().Append(new RtcLogOnFailure);
-    rtc::InitLogger(rtc::LogLevel::Debug, keep);
+    rtc::InitLogger(rtc::LogLevel::Verbose, keep);
     return true;
 }();
 } // namespace
