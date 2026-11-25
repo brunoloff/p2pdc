@@ -31,7 +31,7 @@ jobs:
             mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-glib2 mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-gnutls
             mingw-w64-ucrt-x86_64-nettle mingw-w64-ucrt-x86_64-argon2 mingw-w64-ucrt-x86_64-fmt
-            mingw-w64-ucrt-x86_64-gtest
+            mingw-w64-ucrt-x86_64-gtest mingw-w64-ucrt-x86_64-gdb
       - name: Restore dependencies
         id: deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -46,6 +46,13 @@ jobs:
           export PATH="$PWD/build/prefix-windows/bin:$PATH"
           cmake --preset windows
           cmake --build --preset windows
+      - name: Repeat the echo example test, showing every thread's stack if one hangs
+        # About one local connection in a hundred stalls in SCTP after DTLS on Windows (run
+        # 45592941939); this test stalled most often. It gives up after 30 s; a run takes 1 s.
+        run: |
+          export PATH="$PWD/build/prefix-windows/bin:$PATH"
+          tools/backtrace-hung-test.sh build/windows/p2pdc_native_transport_tests \
+            'NativeEchoExampleTest.SharedExampleExchangesAndReportsDirectRoute' 30 20
       - name: Test
         run: |
           export PATH="$PWD/build/prefix-windows/bin:$PATH"

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs a gtest binary several times and, if a run outlives the time limit, prints every
-# thread's stack with lldb (macOS) or gdb before killing it, so CI shows where a test hangs.
+# thread's stack with lldb (macOS) or gdb (Linux, MSYS2) before killing it, so CI shows where a
+# test hangs.
 # Usage: tools/backtrace-hung-test.sh <test binary> <gtest filter> [runs] [seconds]
 set -eu
 binary=$1 filter=$2 runs=${3:-5} limit=${4:-60}
@@ -13,7 +14,10 @@ backtrace() {
     if command -v lldb >/dev/null; then
         $sudo lldb --batch -p "$1" -o "thread backtrace all" -o "process detach"
     elif command -v gdb >/dev/null; then
-        $sudo gdb --batch -p "$1" -ex "thread apply all bt"
+        # In MSYS2 the shell's process ID is not the Windows one that gdb attaches to.
+        target=$1
+        if [ -r "/proc/$1/winpid" ]; then target=$(cat "/proc/$1/winpid"); fi
+        $sudo gdb --batch -p "$target" -ex "thread apply all bt"
     else
         echo "neither lldb nor gdb is installed" >&2
     fi
