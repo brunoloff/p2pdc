@@ -282,10 +282,31 @@ index 1fb8595..a4f812c 100644
  
  template <typename T> optional<T> Queue<T>::pop() {
 diff --git a/src/impl/sctptransport.cpp b/src/impl/sctptransport.cpp
-index 45e7348..17733b4 100644
+index 45e7348..dc62333 100644
 --- a/src/impl/sctptransport.cpp
 +++ b/src/impl/sctptransport.cpp
-@@ -373,8 +373,11 @@ void SctpTransport::connect() {
+@@ -72,6 +72,12 @@ public:
+ 	}
+ 
+ 	using shared_lock = std::shared_lock<std::shared_mutex>;
++	// p2pdc diagnostic: how many transports the set holds.
++	size_t size() {
++		shared_lock lock(mMutex);
++		return mSet.size();
++	}
++
+ 	optional<shared_lock> lock(SctpTransport *instance) noexcept {
+ 		shared_lock lock(mMutex);
+ 		return mSet.find(instance) != mSet.end() ? std::make_optional(std::move(lock)) : nullopt;
+@@ -311,6 +317,7 @@ SctpTransport::SctpTransport(shared_ptr<Transport> lower, const Configuration &c
+ 
+ 	usrsctp_register_address(this);
+ 	Instances->insert(this);
++	PLOG_VERBOSE << "SCTP transport " << this << " registered, instances=" << Instances->size();
+ }
+ 
+ SctpTransport::~SctpTransport() {
+@@ -373,8 +380,11 @@ void SctpTransport::connect() {
  
  bool SctpTransport::send(message_ptr message) {
  	std::lock_guard lock(mSendMutex);
@@ -298,7 +319,7 @@ index 45e7348..17733b4 100644
  
  	if (!message)
  		return trySendQueue();
-@@ -388,7 +391,8 @@ bool SctpTransport::send(message_ptr message) {
+@@ -388,7 +398,8 @@ bool SctpTransport::send(message_ptr message) {
  	if (trySendQueue() && trySendMessage(message))
  		return true;
  
@@ -308,7 +329,7 @@ index 45e7348..17733b4 100644
  	updateBufferedAmount(to_uint16(message->stream), ptrdiff_t(message_size_func(message)));
  	return false;
  }
-@@ -599,7 +603,7 @@ bool SctpTransport::trySendQueue() {
+@@ -599,7 +610,7 @@ bool SctpTransport::trySendQueue() {
  bool SctpTransport::trySendMessage(message_ptr message) {
  	// Requires mSendMutex to be locked
  	if (state() != State::Connected)
@@ -317,3 +338,16 @@ index 45e7348..17733b4 100644
  
  	uint32_t ppid;
  	switch (message->type) {
+@@ -984,8 +995,10 @@ int SctpTransport::WriteCallback(void *ptr, void *data, size_t len, uint8_t tos,
+ 	// https://github.com/sctplab/usrsctp/issues/405
+ 	if (auto locked = Instances->lock(transport))
+ 		return transport->handleWrite(static_cast<byte *>(data), len, tos, set_df);
+-	else
+-		return -1;
++
++	PLOG_WARNING << "SCTP write for unregistered transport " << ptr
++	             << ", instances=" << Instances->size();
++	return -1;
+ }
+ 
+ void SctpTransport::DebugCallback(const char *format, ...) {
