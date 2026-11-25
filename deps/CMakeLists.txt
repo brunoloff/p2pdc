@@ -53,7 +53,6 @@ set(opendht_dependencies)
 set(opendht_patch)
 set(libnice_dependencies)
 set(libdatachannel_dependencies)
-set(libdatachannel_options)
 set(build_environment)
 set(configure_shell)
 if(WIN32)
@@ -69,9 +68,6 @@ if(WIN32)
     set(opendht_dependencies simdutf)
     set(opendht_patch PATCH_COMMAND ${CMAKE_COMMAND} -P
         "${CMAKE_CURRENT_LIST_DIR}/opendht-skip-runtime-dependencies.cmake")
-    # Temporary: usrsctp's own debug output in libdatachannel's verbose log, to find why one
-    # side of a local connection sometimes never sends its SCTP INIT on Windows.
-    set(libdatachannel_options -DSCTP_DEBUG=ON)
 endif()
 if(APPLE)
     include("${CMAKE_CURRENT_LIST_DIR}/macos.cmake")
@@ -135,7 +131,7 @@ ExternalProject_Add(libdatachannel
     PATCH_COMMAND git apply "${patches}/libdatachannel-v0.23.2-p2pdc.patch"
     # WebSocket carries the Nostr and MQTT discovery backends (docs/DISCOVERY_BACKENDS.md).
     CMAKE_ARGS ${cmake_arguments} -DUSE_NICE=ON -DNO_MEDIA=ON -DNO_WEBSOCKET=OFF
-        -DNO_EXAMPLES=ON -DNO_TESTS=ON ${libdatachannel_options}
+        -DNO_EXAMPLES=ON -DNO_TESTS=ON
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target datachannel)
 
 # BIP340 Schnorr signatures for Nostr events (MIT).

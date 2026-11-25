@@ -40,8 +40,5 @@ jobs:
           cmake --preset macos -DGTest_DIR="$(brew --prefix googletest)/lib/cmake/GTest" \
             -DP2PDC_TEST_NODE_EXECUTABLE="$(command -v node)"
           cmake --build --preset macos
-      - name: Repeat the PeerJS tests, showing every thread's stack if one hangs
-        # PeerJsStoreTest once hung on macOS 15 (run 45576955709); this shows where.
-        run: tools/backtrace-hung-test.sh build/macos/p2pdc_backend_tests 'PeerJsStoreTest.*' 20 90
       - name: Test
         run: ctest --preset macos

@@ -18,7 +18,7 @@
 #endif
 
 namespace {
-constexpr std::size_t max_lines = 30000;
+constexpr std::size_t max_lines = 6000;
 
 // Never freed: libdatachannel's threads may still log while the process exits.
 struct Lines {
