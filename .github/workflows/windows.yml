@@ -46,14 +46,9 @@ jobs:
           export PATH="$PWD/build/prefix-windows/bin:$PATH"
           cmake --preset windows
           cmake --build --preset windows
-      - name: Repeat the echo example test, showing every thread's stack if one hangs
-        # About one local connection in a hundred stalls in SCTP after DTLS on Windows (run
-        # 45592941939); this test stalled most often. It gives up after 30 s; a run takes 1 s.
-        run: |
-          export PATH="$PWD/build/prefix-windows/bin:$PATH"
-          tools/backtrace-hung-test.sh build/windows/p2pdc_native_transport_tests \
-            'NativeEchoExampleTest.SharedExampleExchangesAndReportsDirectRoute' 30 20
       - name: Test
         run: |
           export PATH="$PWD/build/prefix-windows/bin:$PATH"
-          ctest --preset windows
+          # About one local connection in a hundred stalls in SCTP after DTLS on Windows (run
+          # 45592941939); a failing native transport test then prints every thread's stack.
+          P2PDC_TEST_STACKS_ON_FAILURE=1 ctest --preset windows
