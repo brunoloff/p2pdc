@@ -69,9 +69,11 @@ class Connection {
 // requests with the first one offered from `protocols`. With `tls` ({ key, cert }), serves wss://.
 export async function startWebSocketServer(accept, protocols = [], tls = null) {
     const connections = new Set();
+    let closing = false;
     const refuse = (request, response) => { response.writeHead(426); response.end(); };
     const server = tls ? createSecureServer(tls, refuse) : createServer(refuse);
     server.on("upgrade", (request, socket) => {
+        if (closing) { socket.destroy(); return; }
         const key = request.headers["sec-websocket-key"];
         const offered = (request.headers["sec-websocket-protocol"] ?? "").split(",").map((item) => item.trim());
         const protocol = offered.find((item) => protocols.includes(item));
@@ -91,9 +93,13 @@ export async function startWebSocketServer(accept, protocols = [], tls = null) {
         url: (path = "/") => `${tls ? "wss" : "ws"}://127.0.0.1:${port}${path}`,
         connections,
         dropAll() { for (const connection of [...connections]) connection.close(); },
+        // Ends every connection, including those that have not finished their upgrade, which
+        // server.close() alone would wait for.
         close: () => new Promise((resolve) => {
+            closing = true;
             for (const connection of [...connections]) connection.close();
             server.close(() => resolve());
+            server.closeAllConnections();
         }),
     };
 }

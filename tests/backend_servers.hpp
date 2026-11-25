@@ -1,13 +1,16 @@
 #pragma once
 
+#include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <spawn.h>
 #include <stdexcept>
 #include <string>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 
 extern char **environ;
@@ -47,10 +50,19 @@ class BackendServers {
         peerjs = urls.at("peerjs").get<std::string>();
         silent_peerjs = urls.at("silentPeerjs").get<std::string>();
     }
+    // The script exits when its input closes. A script that has not exited after ten seconds
+    // fails the test and is killed, rather than hanging it.
     ~BackendServers() {
-        fclose(input_); // the script exits when its input closes
+        fclose(input_);
         fclose(output_);
         int status = 0;
+        for (int waited = 0; waited < 200; ++waited) {
+            if (waitpid(pid_, &status, WNOHANG) == pid_)
+                return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        ADD_FAILURE() << "the test servers (serve_backends.mjs) did not exit within 10 s";
+        kill(pid_, SIGKILL);
         waitpid(pid_, &status, 0);
     }
     BackendServers(const BackendServers &) = delete;
