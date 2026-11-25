@@ -282,22 +282,10 @@ index 1fb8595..a4f812c 100644
  
  template <typename T> optional<T> Queue<T>::pop() {
 diff --git a/src/impl/sctptransport.cpp b/src/impl/sctptransport.cpp
-index 45e7348..cd48ddd 100644
+index 45e7348..17733b4 100644
 --- a/src/impl/sctptransport.cpp
 +++ b/src/impl/sctptransport.cpp
-@@ -358,6 +358,11 @@ void SctpTransport::connect() {
- 	           << ", remote port=" << mPorts.remote << ")";
- 	changeState(State::Connecting);
- 
-+	// p2pdc patch: on Windows, two associations connecting at once in one process sometimes left
-+	// one without its INIT or any retransmission, so connections are set up one at a time.
-+	static std::mutex connectMutex;
-+	std::lock_guard connectLock(connectMutex);
-+
- 	auto local = getSockAddrConn(mPorts.local);
- 	if (usrsctp_bind(mSock, reinterpret_cast<struct sockaddr *>(&local), sizeof(local)))
- 		throw std::runtime_error("Could not bind usrsctp socket, errno=" + std::to_string(errno));
-@@ -373,8 +378,11 @@ void SctpTransport::connect() {
+@@ -373,8 +373,11 @@ void SctpTransport::connect() {
  
  bool SctpTransport::send(message_ptr message) {
  	std::lock_guard lock(mSendMutex);
@@ -310,7 +298,7 @@ index 45e7348..cd48ddd 100644
  
  	if (!message)
  		return trySendQueue();
-@@ -388,7 +396,8 @@ bool SctpTransport::send(message_ptr message) {
+@@ -388,7 +391,8 @@ bool SctpTransport::send(message_ptr message) {
  	if (trySendQueue() && trySendMessage(message))
  		return true;
  
@@ -320,7 +308,7 @@ index 45e7348..cd48ddd 100644
  	updateBufferedAmount(to_uint16(message->stream), ptrdiff_t(message_size_func(message)));
  	return false;
  }
-@@ -599,7 +608,7 @@ bool SctpTransport::trySendQueue() {
+@@ -599,7 +603,7 @@ bool SctpTransport::trySendQueue() {
  bool SctpTransport::trySendMessage(message_ptr message) {
  	// Requires mSendMutex to be locked
  	if (state() != State::Connected)
