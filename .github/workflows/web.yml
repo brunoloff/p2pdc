@@ -1,8 +1,11 @@
-name: CI
+name: Web
 
+# Builds the browser library. Each platform has its own workflow, so each reports, shows its
+# logs and can be re-run as soon as it finishes, apart from the others.
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,27 +14,6 @@ env:
   CMAKE_BUILD_PARALLEL_LEVEL: 4
 
 jobs:
-  linux:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install system packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config meson libglib2.0-dev libssl-dev \
-            libgnutls28-dev nettle-dev libargon2-dev libfmt-dev libgtest-dev libgmock-dev
-      - name: Restore dependencies
-        id: deps
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/prefix-linux
-          key: deps-linux-${{ runner.os }}-${{ hashFiles('deps/**', 'patches/**') }}
-      - name: Build dependencies
-        if: steps.deps.outputs.cache-hit != 'true'
-        run: cmake --workflow --preset deps
-      - name: Build and test
-        run: cmake --workflow --preset linux
-
   web:
     runs-on: ubuntu-24.04
     steps:

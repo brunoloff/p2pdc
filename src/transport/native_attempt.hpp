@@ -13,7 +13,7 @@ using NativeAttemptState = ConnectionAttemptState;
 using NativeStart = ConnectionAttemptStart;
 
 struct NativeAttemptConfig {
-    NativeStore store;
+    RecordStore store;
     std::array<std::byte, 20> local_mailbox;
     std::array<std::byte, 20> remote_mailbox;
     NativeSignalBinding binding;

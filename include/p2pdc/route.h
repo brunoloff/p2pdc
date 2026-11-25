@@ -21,6 +21,9 @@ struct RouteInfo {
     TurnHistory turn_history = TurnHistory::Unknown;
     std::optional<CandidatePair> selected_pair;
     std::optional<std::chrono::steady_clock::time_point> observed_at;
+    // Smoothed round-trip time of the selected path, as WebRTC measures it, refreshed about
+    // every two seconds. Empty until measured and while no path is selected.
+    std::optional<std::chrono::milliseconds> round_trip_time;
 };
 
 // Only a complete, continuous observation can prove TURN was never used. The owner

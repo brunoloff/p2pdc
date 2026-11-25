@@ -293,6 +293,9 @@ TEST_F(NativePublicOutgoingTest, PublicConnectionExchangesBytesAndClosesOnNodeSh
     ASSERT_TRUE(advance_until([&] { return !messages.empty() && !routes.empty(); }));
     EXPECT_EQ(messages.front(), (Bytes{std::byte{42}}));
     EXPECT_EQ(routes.back().current, RouteKind::Direct);
+    ASSERT_TRUE(advance_until([&] { return connection->round_trip_time().has_value(); }));
+    EXPECT_LT(*connection->round_trip_time(), std::chrono::milliseconds{1000});
+    EXPECT_EQ(connection->route().round_trip_time, connection->round_trip_time());
     remote.attempt->close();
     inbox->close();
     stop_node();
@@ -300,6 +303,7 @@ TEST_F(NativePublicOutgoingTest, PublicConnectionExchangesBytesAndClosesOnNodeSh
     EXPECT_EQ(connection->send(Bytes{}), SendStatus::Closed);
     EXPECT_EQ(connection->route().current, RouteKind::Unknown);
     EXPECT_FALSE(connection->route().selected_pair);
+    EXPECT_FALSE(connection->round_trip_time());
 }
 
 TEST_F(NativePublicOutgoingTest, PublicConnectionTimesOutWithoutResponder) {

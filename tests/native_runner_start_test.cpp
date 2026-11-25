@@ -21,7 +21,7 @@ TEST(NativeRunnerStart, AcceptsEmptyAndBareIpBootstrapConfiguration) {
 TEST(NativeRunnerStart, SharedConfigurationPreservesNativeValidation) {
     DiscoveryConfig config;
     config.bootstrap_servers = {{"127.0.0.1", 4222}};
-    config.browser_backends = {p2pdc::OpenDhtProxies{{"https://proxy.example"}}};
+    config.discovery_backends = {p2pdc::OpenDhtProxies{{"https://proxy.example"}}};
     EXPECT_TRUE(make_native_runner_start(config));
     config.bootstrap_servers = {{"invalid host", 4222}};
     EXPECT_THROW(static_cast<void>(make_native_runner_start(config)), std::invalid_argument);
@@ -58,7 +58,7 @@ TEST(NativeRunnerStart, BootstrapsLocalNodeUsingPublicConfiguration) {
     config.network_id = 0x12345693;
     config.bind_addresses = NativeBindAddresses{"127.0.0.1", "::1"};
     config.bootstrap_servers = {{"127.0.0.1", first.getBoundPort(AF_INET)}};
-    config.browser_backends = {p2pdc::OpenDhtProxies{{"https://proxy.example"}}};
+    config.discovery_backends = {p2pdc::OpenDhtProxies{{"https://proxy.example"}}};
     dht::DhtRunner second;
     make_native_runner_start(config)(second);
     ASSERT_TRUE(second.isRunning());

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "p2pdc/browser_backends.h"
+#include "p2pdc/discovery_backends.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,8 +24,9 @@ struct NativeBindAddresses {
 };
 
 // Configuration shared by native and browser builds. Native OpenDHT uses the
-// bind, network and bootstrap settings. Browser discovery uses the browser
-// backends (p2pdc/browser_backends.h), all at once; native builds ignore them.
+// bind, network and bootstrap settings. Nodes also use every discovery backend
+// (p2pdc/discovery_backends.h) at once; native nodes join the DHT directly and
+// skip OpenDHT proxy entries.
 //
 // A zero bind port selects an ephemeral port; the native
 // backend binds wildcard interfaces unless bind_addresses is supplied. Peers
@@ -40,8 +41,9 @@ struct DiscoveryConfig {
     std::uint32_t network_id = 0;
     std::vector<BootstrapServer> bootstrap_servers;
     std::optional<NativeBindAddresses> bind_addresses;
-    // Where browser nodes meet, 1 to 8 backends; a browser node uses all of them at once.
-    std::vector<BrowserBackend> browser_backends;
+    // Where nodes meet besides the DHT, all used at once: 1 to 8 backends in browsers,
+    // 0 to 8 in native nodes, which throw std::invalid_argument for an invalid entry.
+    std::vector<DiscoveryBackend> discovery_backends;
     // Maximum retained connection handles per node, including pending attempts.
     // Shared by all capabilities. Valid range: 1 through 1024.
     std::size_t max_connections = 8;

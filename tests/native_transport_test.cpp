@@ -83,12 +83,16 @@ TEST(NativeTransport, LiveDirectEchoPreservesEmptyBinaryAndOrder) {
     }
     EXPECT_EQ(route.turn_history, TurnHistory::Unknown);
     EXPECT_TRUE(route.observed_at);
+    // SCTP's round-trip estimate, smoothed; on loopback it is tiny.
+    ASSERT_TRUE(pair.queue.until([&] { return pair.a->poll_route().round_trip_time.has_value(); }));
+    EXPECT_LT(*pair.a->poll_route().round_trip_time, std::chrono::milliseconds{1000});
     EXPECT_THROW(
         pair.a->set_remote_description(rtc::Description("", rtc::Description::Type::Answer)),
         std::logic_error);
     pair.a->close();
     EXPECT_EQ(pair.a->send({}), NativeSendResult::NotReady);
     EXPECT_EQ(pair.a->poll_route().current, RouteKind::Unknown);
+    EXPECT_FALSE(pair.a->poll_route().round_trip_time);
 }
 
 TEST(NativeTransport, AnnouncesReadyBeforeDeliveringImmediateData) {

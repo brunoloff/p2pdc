@@ -8,7 +8,7 @@ const validationHandlers = { onDescription: noop, onCandidate: noop, onState: no
 
 export const sameBytes = (a, b) => a.length === b.length && a.every((value, i) => value === b[i]);
 export const sameEndpoint = (a, b) => a && b && fields.every((field) => sameBytes(a[field], b[field]));
-export const unknownRoute = () => ({ current: "unknown", turnHistory: "unknown", selectedPair: null });
+export const unknownRoute = () => ({ current: "unknown", turnHistory: "unknown", selectedPair: null, roundTripMs: null });
 
 export function copyBytes(value, size) {
     if (!(value instanceof Uint8Array) || byteLength.call(value) !== size) throw new TypeError("invalid binary input");

@@ -100,4 +100,11 @@ class NativeStore {
     std::function<void()> before_record_copy_;
 };
 
+class NetworkBackends;
+// The node's record store: the DHT, used all at once with the node's network backends when
+// it has any (null backends: the DHT alone).
+[[nodiscard]] RecordStore make_native_record_store(std::shared_ptr<dht::DhtRunner> runner,
+                                                   const std::shared_ptr<NetworkBackends> &backends,
+                                                   StoreLimits limits);
+
 } // namespace p2pdc::detail

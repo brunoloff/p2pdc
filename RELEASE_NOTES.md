@@ -1,3 +1,47 @@
+# Unreleased
+
+## Changes since 0.3.0
+
+- **Native nodes meet through Nostr relays, MQTT brokers and PeerJS servers too.**
+  Besides joining the DHT, a native node now uses the Nostr relays, MQTT 5 brokers
+  and PeerJS servers of its backend list, all at once with the same rules as
+  browsers, so two people still meet when one of them is on a network that blocks
+  the DHT. Native and browser nodes share PeerJS keys: either may host a key for the
+  other, over a WebRTC data connection. A node keeps one connection per server,
+  shared by all its stores. OpenDHT proxy entries remain browser-only.
+- New dependencies for native builds: libdatachannel built with WebSocket support,
+  libsecp256k1 0.7.0 (Nostr signatures) and nlohmann/json 3.12.0 (Nostr and PeerJS
+  messages); `deps/` builds
+  them. `-DP2PDC_ENABLE_NETWORK_BACKENDS=OFF` builds without them.
+- **TLS on Windows:** libdatachannel does not check server certificates on Windows,
+  so these connections are not authenticated there (see
+  [discovery backends](docs/DISCOVERY_BACKENDS.md#in-native-nodes)).
+- **Fixed on Windows:** about one connection in a hundred never opened its data
+  channel when two connections started at the same moment in one process. With
+  MinGW, the lock guarding libdatachannel's list of SCTP transports let two
+  registrations corrupt it, and every SCTP packet of one connection was then
+  dropped. p2pdc's libdatachannel patch now uses Windows' own reader/writer lock
+  there.
+- GitHub Actions now builds and tests on Linux, in browsers, on macOS (Apple
+  Silicon and Intel) and on Windows (MSYS2), one workflow per platform. The new
+  `deps-macos`, `macos`, `deps-windows` and `windows` presets do the same locally.
+
+## Breaking change: browser backends are now discovery backends
+
+The backends are no longer browser-only, so their names changed:
+
+| 0.3.0 | now |
+|---|---|
+| `p2pdc/browser_backends.h` | `p2pdc/discovery_backends.h` |
+| `DiscoveryConfig::browser_backends` | `DiscoveryConfig::discovery_backends` |
+| `BrowserBackend` | `DiscoveryBackend` |
+| `parse_browser_backend()` | `parse_discovery_backend()` |
+| `valid_browser_backend()` | `valid_discovery_backend()` |
+| `max_browser_backends`, `max_browser_proxies` | `max_discovery_backends`, `max_opendht_proxies` |
+
+Native nodes used to ignore the list; they now check it, and `Node::create` throws
+`std::invalid_argument` for more than eight entries or an invalid one.
+
 # 0.3.0
 
 p2pdc discovers peers through OpenDHT and opens authenticated, reliable,

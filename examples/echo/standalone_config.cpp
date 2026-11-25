@@ -55,7 +55,7 @@ std::optional<std::string> discovery(const Environment &read, StandaloneConfig &
         out.discovery.bootstrap_servers.push_back({*host, number});
     }
     if (proxy && !proxy->empty())
-        out.discovery.browser_backends.push_back(p2pdc::OpenDhtProxies{{*proxy}});
+        out.discovery.discovery_backends.push_back(p2pdc::OpenDhtProxies{{*proxy}});
     if (auto network = read("P2PDC_ECHO_NETWORK");
         network && !parse_number(*network, UINT32_MAX, out.discovery.network_id))
         return "invalid network ID";

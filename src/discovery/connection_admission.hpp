@@ -4,9 +4,8 @@
 #include "p2pdc/node.h"
 #include "peer_admission.hpp"
 
-#ifdef __EMSCRIPTEN__
 #include "record_store.hpp"
-#else
+#ifndef __EMSCRIPTEN__
 #include <opendht.h>
 #endif
 
@@ -15,23 +14,32 @@ namespace p2pdc::detail {
 // Internal, immutable-at-admission data. A future attempt owner must revalidate
 // and track dependent handles, then cancel/close attempts before Node shutdown.
 // Retaining a runner pointer does not mean the runner is still running.
+class NetworkBackends;
 #ifdef __EMSCRIPTEN__
 using AdmissionContext = RecordStore;
 #else
-using AdmissionContext = std::shared_ptr<dht::DhtRunner>;
+// The DHT runner, and the node's network backends when it has any.
+struct AdmissionContext {
+    std::shared_ptr<dht::DhtRunner> runner;
+    std::shared_ptr<NetworkBackends> backends;
+};
 #endif
 
 struct ConnectionAdmission {
 #ifdef __EMSCRIPTEN__
     AdmissionContext store;
 #else
-    AdmissionContext runner;
+    std::shared_ptr<dht::DhtRunner> runner;
 #endif
     AnnouncementEndpoint local;
     Advertisement remote;
     std::shared_ptr<const Bytes> capability;
     std::uint64_t remote_max_lifetime;
     std::uint64_t remote_clock_skew;
+#ifndef __EMSCRIPTEN__
+    // Null when the node meets through the DHT only.
+    std::shared_ptr<NetworkBackends> backends = {};
+#endif
 };
 
 using AdmissionResult = std::variant<ConnectionAdmission, AdmissionError>;

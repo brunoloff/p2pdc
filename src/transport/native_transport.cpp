@@ -122,7 +122,7 @@ RouteInfo NativeTransport::poll_route() {
     if (!impl_->stopped) {
         impl_->update_readiness();
     }
-    return impl_->tracker.route();
+    return impl_->current_route();
 }
 void NativeTransport::resume_receive() { impl_->resume_receive(); }
 void NativeTransport::close() {

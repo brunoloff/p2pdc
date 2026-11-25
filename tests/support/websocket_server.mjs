@@ -2,6 +2,7 @@
 // Handles unfragmented text and binary messages, ping and close.
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import { createServer as createSecureServer } from "node:https";
 
 const acceptSuffix = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -65,11 +66,14 @@ class Connection {
 }
 
 // Starts a server; accept(connection) is called for each new connection. Answers subprotocol
-// requests with the first one offered from `protocols`.
-export async function startWebSocketServer(accept, protocols = []) {
+// requests with the first one offered from `protocols`. With `tls` ({ key, cert }), serves wss://.
+export async function startWebSocketServer(accept, protocols = [], tls = null) {
     const connections = new Set();
-    const server = createServer((request, response) => { response.writeHead(426); response.end(); });
+    let closing = false;
+    const refuse = (request, response) => { response.writeHead(426); response.end(); };
+    const server = tls ? createSecureServer(tls, refuse) : createServer(refuse);
     server.on("upgrade", (request, socket) => {
+        if (closing) { socket.destroy(); return; }
         const key = request.headers["sec-websocket-key"];
         const offered = (request.headers["sec-websocket-protocol"] ?? "").split(",").map((item) => item.trim());
         const protocol = offered.find((item) => protocols.includes(item));
@@ -86,12 +90,16 @@ export async function startWebSocketServer(accept, protocols = []) {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const port = server.address().port;
     return {
-        url: (path = "/") => `ws://127.0.0.1:${port}${path}`,
+        url: (path = "/") => `${tls ? "wss" : "ws"}://127.0.0.1:${port}${path}`,
         connections,
         dropAll() { for (const connection of [...connections]) connection.close(); },
+        // Ends every connection, including those that have not finished their upgrade, which
+        // server.close() alone would wait for.
         close: () => new Promise((resolve) => {
+            closing = true;
             for (const connection of [...connections]) connection.close();
             server.close(() => resolve());
+            server.closeAllConnections();
         }),
     };
 }

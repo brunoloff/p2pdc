@@ -338,7 +338,8 @@ detail::AdmissionResult detail::ConnectionAccess::resolve(Node &node, const Leas
     return resolve_owned_context(state->make_store({32768, 128, 1048576}), *lease.state_,
                                  *subscription.state_, peer);
 #else
-    return resolve_owned_context(state->runner, *lease.state_, *subscription.state_, peer);
+    return resolve_owned_context(AdmissionContext{state->runner, state->network_backends},
+                                 *lease.state_, *subscription.state_, peer);
 #endif
 }
 #endif

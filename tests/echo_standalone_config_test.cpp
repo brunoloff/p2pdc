@@ -42,8 +42,8 @@ TEST(EchoStandaloneConfigTest, ParsesSharedDiscoveryAndTurnSettings) {
     auto &config = std::get<StandaloneConfig>(parsed);
     EXPECT_EQ(config.discovery.network_id, 42U);
     EXPECT_EQ(config.discovery.bootstrap_servers.front().port, 4222);
-    EXPECT_EQ(config.discovery.browser_backends.front(),
-              p2pdc::BrowserBackend(p2pdc::OpenDhtProxies{{"https://example.test"}}));
+    EXPECT_EQ(config.discovery.discovery_backends.front(),
+              p2pdc::DiscoveryBackend(p2pdc::OpenDhtProxies{{"https://example.test"}}));
     EXPECT_EQ(config.ice.relay_policy, RelayPolicy::RequireLocalRelay);
     EXPECT_EQ(std::get<StunServer>(config.ice.servers.front()).port, 3479);
     const auto &turn = std::get<TurnServer>(config.ice.servers.back());

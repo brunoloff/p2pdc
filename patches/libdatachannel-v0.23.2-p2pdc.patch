@@ -282,10 +282,68 @@ index 1fb8595..a4f812c 100644
  
  template <typename T> optional<T> Queue<T>::pop() {
 diff --git a/src/impl/sctptransport.cpp b/src/impl/sctptransport.cpp
-index 45e7348..17733b4 100644
+index 45e7348..aa5aa73 100644
 --- a/src/impl/sctptransport.cpp
 +++ b/src/impl/sctptransport.cpp
-@@ -373,8 +373,11 @@ void SctpTransport::connect() {
+@@ -24,6 +24,13 @@
+ #include <unordered_set>
+ #include <vector>
+ 
++#ifdef _WIN32
++#ifndef NOMINMAX
++#define NOMINMAX
++#endif
++#include <windows.h>
++#endif
++
+ // RFC 8831: SCTP MUST support performing Path MTU discovery without relying on ICMP or ICMPv6 as
+ // specified in [RFC4821] by using probing messages specified in [RFC4820].
+ // See https://www.rfc-editor.org/rfc/rfc8831.html#section-5
+@@ -59,6 +66,25 @@ using utils::to_uint32;
+ static LogCounter COUNTER_UNKNOWN_PPID(plog::warning,
+                                        "Number of SCTP packets received with an unknown PPID");
+ 
++// p2pdc patch: with MinGW, std::shared_mutex is winpthreads' rwlock, which sometimes let two
++// transports registering at once from two threads into the set together and corrupted it: the
++// lookup then failed for a registered transport, whose every SCTP packet was dropped. Windows'
++// own slim reader/writer lock keeps writers apart. No caller takes it twice on one thread.
++#ifdef _WIN32
++class InstancesMutex {
++public:
++	void lock() { AcquireSRWLockExclusive(&mLock); }
++	void unlock() { ReleaseSRWLockExclusive(&mLock); }
++	void lock_shared() { AcquireSRWLockShared(&mLock); }
++	void unlock_shared() { ReleaseSRWLockShared(&mLock); }
++
++private:
++	SRWLOCK mLock = SRWLOCK_INIT;
++};
++#else
++using InstancesMutex = std::shared_mutex;
++#endif
++
+ class SctpTransport::InstancesSet {
+ public:
+ 	void insert(SctpTransport *instance) {
+@@ -71,7 +97,7 @@ public:
+ 		mSet.erase(instance);
+ 	}
+ 
+-	using shared_lock = std::shared_lock<std::shared_mutex>;
++	using shared_lock = std::shared_lock<InstancesMutex>;
+ 	optional<shared_lock> lock(SctpTransport *instance) noexcept {
+ 		shared_lock lock(mMutex);
+ 		return mSet.find(instance) != mSet.end() ? std::make_optional(std::move(lock)) : nullopt;
+@@ -79,7 +105,7 @@ public:
+ 
+ private:
+ 	std::unordered_set<SctpTransport *> mSet;
+-	std::shared_mutex mMutex;
++	InstancesMutex mMutex;
+ };
+ 
+ SctpTransport::InstancesSet* SctpTransport::Instances = nullptr;
+@@ -373,8 +399,11 @@ void SctpTransport::connect() {
  
  bool SctpTransport::send(message_ptr message) {
  	std::lock_guard lock(mSendMutex);
@@ -298,7 +356,7 @@ index 45e7348..17733b4 100644
  
  	if (!message)
  		return trySendQueue();
-@@ -388,7 +391,8 @@ bool SctpTransport::send(message_ptr message) {
+@@ -388,7 +417,8 @@ bool SctpTransport::send(message_ptr message) {
  	if (trySendQueue() && trySendMessage(message))
  		return true;
  
@@ -308,7 +366,7 @@ index 45e7348..17733b4 100644
  	updateBufferedAmount(to_uint16(message->stream), ptrdiff_t(message_size_func(message)));
  	return false;
  }
-@@ -599,7 +603,7 @@ bool SctpTransport::trySendQueue() {
+@@ -599,7 +629,7 @@ bool SctpTransport::trySendQueue() {
  bool SctpTransport::trySendMessage(message_ptr message) {
  	// Requires mSendMutex to be locked
  	if (state() != State::Connected)

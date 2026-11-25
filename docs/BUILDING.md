@@ -2,7 +2,10 @@
 
 These steps start from a clean checkout. Dependencies are downloaded at pinned versions into
 `build/`; no third-party source is stored in this repository. GitHub Actions runs the same
-commands on Ubuntu 24.04 for every push (see `.github/workflows/ci.yml`).
+commands for every push, with one workflow per platform in `.github/workflows/`: Ubuntu 24.04
+(`linux.yml`), browsers (`web.yml`), macOS on Apple Silicon and Intel (`macos.yml`, presets
+`deps-macos` and `macos`) and Windows in an MSYS2 UCRT64 shell (`windows.yml`, presets
+`deps-windows` and `windows`).
 
 ## What you install yourself
 
@@ -32,8 +35,9 @@ cmake --workflow --preset deps
 cmake --workflow --preset linux
 ```
 
-The first command builds libsodium, msgpack-cxx, OpenDHT and the patched libnice and
-libdatachannel into `build/prefix-linux`. It only has to run again when `deps/` or `patches/`
+The first command builds libsodium, msgpack-cxx, OpenDHT, the patched libnice and
+libdatachannel (with WebSocket support), libsecp256k1 and nlohmann/json into
+`build/prefix-linux`. It only has to run again when `deps/` or `patches/`
 change. The second builds p2pdc and runs its tests on the local machine, without using the
 internet.
 

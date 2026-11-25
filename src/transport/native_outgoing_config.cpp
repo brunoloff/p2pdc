@@ -32,7 +32,8 @@ NativeAttemptConfig make_native_attempt_config(const ConnectionAdmission &admiss
     const auto &remote = admission.remote;
     NativeSignalBinding binding{common.local,      common.remote,  common.local_box,
                                 common.remote_box, common.attempt, common.role};
-    return {NativeStore(admission.runner, {wire_limit, 128, 1024 * 1024}),
+    return {make_native_record_store(admission.runner, admission.backends,
+                                     {wire_limit, 128, 1024 * 1024}),
             local.fields.signaling_inbox,
             remote.fields.signaling_inbox,
             binding,

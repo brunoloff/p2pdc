@@ -80,6 +80,8 @@ class Connection {
     Connection &operator=(const Connection &) = delete;
     [[nodiscard]] ConnectionState state() const;
     [[nodiscard]] RouteInfo route() const;
+    // The route's smoothed round-trip time (RouteInfo::round_trip_time); empty until measured.
+    [[nodiscard]] std::optional<std::chrono::milliseconds> round_trip_time() const;
     // Authenticated, negotiated maximum application-message bytes. Remains
     // available while suspended; empty before authentication and after failure
     // or closure. A value does not guarantee immediate send capacity.

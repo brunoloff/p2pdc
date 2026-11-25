@@ -52,6 +52,7 @@ add_library(p2pdc
     src/core/timer_producer.cpp
     src/core/memory_budget.cpp src/core/ice_config_validation.cpp
     src/core/route.cpp
+    src/core/round_trip.cpp
     src/core/wall_clock.cpp
     src/discovery/incoming.cpp
     src/discovery/native_mailbox.cpp src/discovery/recovering_mailbox.cpp
@@ -59,7 +60,7 @@ add_library(p2pdc
     src/discovery/native_publisher.cpp
     src/discovery/native_signal_pipe.cpp
     src/discovery/record_store.cpp
-    src/discovery/browser_backends.cpp
+    src/discovery/discovery_backends.cpp
     src/discovery/subscription.cpp
     src/discovery/signaling_queue.cpp
     src/protocol/frame.cpp
@@ -86,7 +87,8 @@ else()
         src/browser/opendht_proxy.mjs src/browser/failover_proxy.mjs
         src/browser/websocket_channel.mjs src/browser/schnorr.mjs src/browser/nostr_relay.mjs
         src/browser/mqtt_codec.mjs src/browser/mqtt_broker.mjs
-        src/browser/peerjs_socket.mjs src/browser/peerjs_host.mjs src/browser/peerjs_switchboard.mjs
+        src/browser/peerjs_socket.mjs src/browser/peerjs_link.mjs src/browser/peerjs_endpoint.mjs
+        src/browser/peerjs_host.mjs src/browser/peerjs_switchboard.mjs
         src/browser/fan_out_store.mjs src/browser/discovery_backends.mjs
         src/browser/polling_proxy_watch.mjs src/browser/fallback_proxy_watch.mjs
         src/browser/shared_proxy_watch.mjs src/browser/record_store_bridge.mjs
@@ -272,18 +274,20 @@ if(P2PDC_ENABLE_NATIVE_TRANSPORT)
     target_link_libraries(p2pdc PRIVATE LibDataChannel::LibDataChannel)
 endif()
 
+include(cmake/NetworkBackends.cmake)
 include(cmake/EchoStandalone.cmake)
 if(BUILD_TESTING)
     find_package(GTest REQUIRED)
     include(GoogleTest)
     include(cmake/NativeOptionsTests.cmake)
+    include(cmake/NetworkBackendsTests.cmake)
     if(P2PDC_ENABLE_OPENDHT AND UNIX AND NOT APPLE)
         add_executable(p2pdc_browser_record_native_peer EXCLUDE_FROM_ALL tests/browser_record_native_peer.cpp)
         target_link_libraries(p2pdc_browser_record_native_peer PRIVATE p2pdc::p2pdc ${p2pdc_opendht_target} msgpack-cxx)
         target_compile_options(p2pdc_browser_record_native_peer PRIVATE ${p2pdc_warning_flags})
     endif()
     add_executable(p2pdc_tests
-        tests/browser_backends_test.cpp
+        tests/discovery_backends_test.cpp
         tests/callback_gate_test.cpp
         tests/backend_drain_test.cpp
         tests/deferred_events_test.cpp
@@ -297,7 +301,7 @@ if(BUILD_TESTING)
         tests/rate_window_test.cpp
         tests/join_retry_test.cpp
         tests/operation_test.cpp
-        tests/route_test.cpp
+        tests/route_test.cpp tests/round_trip_test.cpp
         tests/browser_ice_config_test.cpp
         tests/record_store_smoke.cpp
         tests/record_store_test.cpp
@@ -345,7 +349,7 @@ if(BUILD_TESTING)
                 endif()
             endif()
         endif()
-        add_executable(p2pdc_native_transport_tests tests/datagram_support_test.cpp tests/native_transport_test.cpp tests/native_receive_backpressure_test.cpp tests/relay_candidate_filter_test.cpp tests/native_reliable_link_test.cpp tests/native_route_readiness_test.cpp tests/native_ice_config_test.cpp)
+        add_executable(p2pdc_native_transport_tests tests/datagram_support_test.cpp tests/native_transport_test.cpp tests/native_receive_backpressure_test.cpp tests/relay_candidate_filter_test.cpp tests/native_reliable_link_test.cpp tests/native_route_readiness_test.cpp tests/native_ice_config_test.cpp tests/rtc_log_on_failure.cpp)
         if(P2PDC_ENABLE_SODIUM)
             target_sources(p2pdc_native_transport_tests PRIVATE tests/native_handshake_gate_test.cpp)
             if(P2PDC_ENABLE_OPENDHT AND P2PDC_TEST_OPENDHT)

@@ -9,18 +9,20 @@ they are not vendored or automatically locked by the build.
 | Component | Version used |
 | --- | --- |
 | libnice | 0.1.24, commit `af62014d520ac09c8fe1974bda1b253114c68843`, with the supplied TLS patch |
-| libdatachannel | 0.23.2, commit `9e6a13abbb6846c003d817d0387b6706466e2b03`, with the supplied patch |
+| libdatachannel | 0.23.2, commit `9e6a13abbb6846c003d817d0387b6706466e2b03`, with the supplied patch, built with WebSocket support |
 | OpenDHT | 4.4.1 |
 | msgpack-cxx | 8.0.0 |
 | libsodium | 1.0.22 |
+| libsecp256k1 | 0.7.0 (BIP340 Schnorr signatures for Nostr; schnorrsig and extrakeys modules) |
+| nlohmann/json | 3.12.0 (header only; Nostr messages) |
 | GLib | 2.88.3 |
 | OpenSSL | 3.6.5 |
 | Emscripten | 4.0.7 for builds (see `tools/install-emsdk.sh`); the original alpha browser checks used 6.0.10-git, commit `d6c521a7f05449857c76bd99e396895583cf2083` |
 | Chromium | 157.0.8103.38 |
 | Playwright Firefox | 155.0, Playwright browser revision 1543 |
 
-[`deps/CMakeLists.txt`](../deps/CMakeLists.txt) fetches libsodium, msgpack-cxx, OpenDHT, libnice
-and libdatachannel at these versions and applies the patches; see
+[`deps/CMakeLists.txt`](../deps/CMakeLists.txt) fetches libsodium, msgpack-cxx, OpenDHT, libnice,
+libdatachannel, libsecp256k1 and nlohmann/json at these versions and applies the patches; see
 [Building p2pdc](BUILDING.md). The Android OpenDHT and
 Jami contrib checkouts, and the Android libnice and GLib clones are verified
 against the commits above (the shallow Android clones with a `test` that fails

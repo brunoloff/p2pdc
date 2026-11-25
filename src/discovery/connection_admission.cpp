@@ -6,7 +6,7 @@ namespace p2pdc::detail {
 AdmissionResult resolve_owned_context(AdmissionContext context, DiscoveryBackend &lease,
                                       DiscoveryBackend &subscription, const Advertisement &peer) {
 #ifndef __EMSCRIPTEN__
-    if (!context || !context->isRunning()) {
+    if (!context.runner || !context.runner->isRunning()) {
         return AdmissionError::Closed;
     }
 #endif
@@ -14,8 +14,15 @@ AdmissionResult resolve_owned_context(AdmissionContext context, DiscoveryBackend
     if (auto *error = std::get_if<AdmissionError>(&resolved))
         return *error;
     auto result = std::get<PeerAdmission>(std::move(resolved));
+#ifdef __EMSCRIPTEN__
     return ConnectionAdmission{std::move(context),         std::move(result.local),
                                std::move(result.remote),   std::move(result.capability),
                                result.remote_max_lifetime, result.remote_clock_skew};
+#else
+    return ConnectionAdmission{std::move(context.runner),  std::move(result.local),
+                               std::move(result.remote),   std::move(result.capability),
+                               result.remote_max_lifetime, result.remote_clock_skew,
+                               std::move(context.backends)};
+#endif
 }
 } // namespace p2pdc::detail

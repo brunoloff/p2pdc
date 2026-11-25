@@ -108,7 +108,7 @@ auto admission_validator(std::weak_ptr<State> node, detail::PendingIncoming pend
 #ifdef __EMSCRIPTEN__
         auto context = owner->make_store({32768, 128, 1048576});
 #else
-        auto context = owner->runner;
+        auto context = detail::AdmissionContext{owner->runner, owner->network_backends};
 #endif
         auto result =
             detail::resolve_owned_context(std::move(context), *local, *remote, pending.offer.peer);
@@ -217,7 +217,7 @@ ConnectResult Node::accept_request(IncomingListener &listener,
 #ifdef __EMSCRIPTEN__
     auto context = state->make_store({32768, 128, 1048576});
 #else
-    auto context = state->runner;
+    auto context = detail::AdmissionContext{state->runner, state->network_backends};
 #endif
     auto result =
         detail::resolve_owned_context(std::move(context), *local, *remote, pending->offer.peer);

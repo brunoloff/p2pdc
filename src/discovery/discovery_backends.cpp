@@ -1,6 +1,6 @@
-#include "p2pdc/browser_backends.h"
+#include "p2pdc/discovery_backends.h"
 
-#include "browser_backends_json.hpp"
+#include "discovery_backends_json.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -46,7 +46,7 @@ bool valid_url(std::string_view url, std::string_view secure, std::string_view p
 
 struct Validator {
     bool operator()(const OpenDhtProxies &value) const {
-        return !value.urls.empty() && value.urls.size() <= max_browser_proxies &&
+        return !value.urls.empty() && value.urls.size() <= max_opendht_proxies &&
                std::ranges::all_of(value.urls,
                                    [](const auto &url) { return valid_url(url, "https", "http"); });
     }
@@ -60,7 +60,7 @@ struct Validator {
     }
 };
 
-std::optional<BrowserBackend> parsed(const std::vector<std::string_view> &parts) {
+std::optional<DiscoveryBackend> parsed(const std::vector<std::string_view> &parts) {
     const std::string kind(parts.front());
     if (kind == "opendht" && parts.size() >= 2)
         return OpenDhtProxies{{parts.begin() + 1, parts.end()}};
@@ -76,21 +76,21 @@ std::optional<BrowserBackend> parsed(const std::vector<std::string_view> &parts)
 
 } // namespace
 
-bool valid_browser_backend(const BrowserBackend &backend) {
+bool valid_discovery_backend(const DiscoveryBackend &backend) {
     return std::visit(Validator{}, backend);
 }
 
-std::optional<BrowserBackend> parse_browser_backend(std::string_view text) {
+std::optional<DiscoveryBackend> parse_discovery_backend(std::string_view text) {
     const auto parts = words(text);
     if (parts.empty())
         return std::nullopt;
     auto backend = parsed(parts);
-    if (!backend || !valid_browser_backend(*backend))
+    if (!backend || !valid_discovery_backend(*backend))
         return std::nullopt;
     return backend;
 }
 
-std::string to_string(const BrowserBackend &backend) {
+std::string to_string(const DiscoveryBackend &backend) {
     struct Writer {
         std::string operator()(const OpenDhtProxies &value) const {
             std::string text = "opendht";
@@ -109,10 +109,16 @@ std::string to_string(const BrowserBackend &backend) {
 
 namespace detail {
 
+void validate_discovery_backends(const std::vector<::p2pdc::DiscoveryBackend> &backends) {
+    if (backends.size() > max_discovery_backends ||
+        !std::ranges::all_of(backends, valid_discovery_backend))
+        throw std::invalid_argument("nodes take at most 8 valid discovery backends");
+}
+
 // Valid URLs and keys hold no quote, backslash or control character, so they need no escaping.
-std::string browser_backends_json(const std::vector<BrowserBackend> &backends) {
-    if (backends.empty() || backends.size() > max_browser_backends ||
-        !std::ranges::all_of(backends, valid_browser_backend))
+std::string discovery_backends_json(const std::vector<::p2pdc::DiscoveryBackend> &backends) {
+    if (backends.empty() || backends.size() > max_discovery_backends ||
+        !std::ranges::all_of(backends, valid_discovery_backend))
         throw std::invalid_argument("browser nodes take 1 to 8 valid discovery backends");
     struct Writer {
         std::string operator()(const OpenDhtProxies &value) const {
