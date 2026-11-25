@@ -18,6 +18,11 @@ class RecipientKeyPair {
   public:
     static CryptoResult<RecipientKeyPair> generate();
     static CryptoResult<RecipientKeyPair> import_secret_key(ByteView secret_key);
+    // The X25519 keypair of an Ed25519 identity (libsodium's
+    // crypto_sign_ed25519_sk_to_curve25519), which opens boxes sealed with
+    // seal_to_signing_key to that identity's public key. Signing and sealing then share one
+    // key; libsodium supports this conversion for exactly that use.
+    static CryptoResult<RecipientKeyPair> from_identity(const Identity &identity);
     RecipientKeyPair(RecipientKeyPair &&) noexcept;
     RecipientKeyPair &operator=(RecipientKeyPair &&) noexcept;
     ~RecipientKeyPair();
@@ -44,5 +49,12 @@ class RecipientKeyPair {
 [[nodiscard]] CryptoResult<Bytes> seal_to_recipient(ByteView recipient_public_key,
                                                     ByteView plaintext,
                                                     std::size_t max_plaintext_size);
+
+// Seals to the X25519 key of an Ed25519 signing public key
+// (crypto_sign_ed25519_pk_to_curve25519); RecipientKeyPair::from_identity opens it.
+// InvalidIdentity when the key is not a valid Ed25519 point.
+[[nodiscard]] CryptoResult<Bytes> seal_to_signing_key(ByteView signing_public_key,
+                                                      ByteView plaintext,
+                                                      std::size_t max_plaintext_size);
 
 } // namespace p2pdc

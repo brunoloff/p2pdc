@@ -161,3 +161,45 @@ TEST_F(RecipientCryptoTest, ImportedSecretOutlivesCallerBufferAndReplacedKey) {
     ASSERT_TRUE(std::holds_alternative<Bytes>(plaintext));
     EXPECT_EQ(std::get<Bytes>(plaintext), Bytes(message.begin(), message.end()));
 }
+
+TEST(SealToSigningKeyTest, IdentityOpensBoxesSealedToItsSigningKey) {
+    auto identity = std::get<Identity>(Identity::generate());
+    const auto public_key = identity.public_key();
+    const auto sealed = seal_to_signing_key(public_key, message, message.size());
+    ASSERT_TRUE(std::holds_alternative<Bytes>(sealed));
+    auto derived = RecipientKeyPair::from_identity(identity);
+    ASSERT_TRUE(std::holds_alternative<RecipientKeyPair>(derived));
+    const auto opened =
+        std::get<RecipientKeyPair>(derived).open_sealed(std::get<Bytes>(sealed), message.size());
+    ASSERT_TRUE(std::holds_alternative<Bytes>(opened));
+    EXPECT_EQ(std::get<Bytes>(opened), Bytes(message.begin(), message.end()));
+}
+
+TEST(SealToSigningKeyTest, AnotherIdentityCannotOpen) {
+    auto identity = std::get<Identity>(Identity::generate());
+    auto other = std::get<Identity>(Identity::generate());
+    const auto sealed =
+        std::get<Bytes>(seal_to_signing_key(identity.public_key(), message, message.size()));
+    auto derived = std::get<RecipientKeyPair>(RecipientKeyPair::from_identity(other));
+    EXPECT_EQ(std::get<CryptoError>(derived.open_sealed(sealed, message.size())),
+              CryptoError::AuthenticationFailed);
+}
+
+TEST(SealToSigningKeyTest, RejectsMalformedSigningKeys) {
+    const std::array<std::byte, 31> short_key{};
+    EXPECT_EQ(std::get<CryptoError>(seal_to_signing_key(short_key, message, message.size())),
+              CryptoError::InvalidLength);
+    std::array<std::byte, signing_public_key_size> not_a_point{};
+    not_a_point.fill(std::byte{0xff});
+    EXPECT_EQ(std::get<CryptoError>(seal_to_signing_key(not_a_point, message, message.size())),
+              CryptoError::InvalidIdentity);
+}
+
+TEST(SealToSigningKeyTest, MovedFromIdentityIsRefused) {
+    auto identity = std::get<Identity>(Identity::generate());
+    Identity moved = std::move(identity);
+    // NOLINTNEXTLINE(bugprone-use-after-move): the moved-from state is what is tested
+    EXPECT_EQ(std::get<CryptoError>(RecipientKeyPair::from_identity(identity)),
+              CryptoError::InvalidIdentity);
+    EXPECT_TRUE(std::holds_alternative<RecipientKeyPair>(RecipientKeyPair::from_identity(moved)));
+}

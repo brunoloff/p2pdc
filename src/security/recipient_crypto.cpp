@@ -2,6 +2,7 @@
 
 #include <sodium.h>
 
+#include <array>
 #include <cstring>
 #include <limits>
 #include <new>
@@ -77,6 +78,40 @@ CryptoResult<RecipientKeyPair> RecipientKeyPair::import_secret_key(ByteView secr
     return RecipientKeyPair(std::move(secret), public_key);
 }
 
+CryptoResult<RecipientKeyPair> RecipientKeyPair::from_identity(const Identity &identity) {
+    if (!initialized()) {
+        return CryptoError::InitializationFailed;
+    }
+    auto *seed = static_cast<unsigned char *>(sodium_malloc(identity_seed_size));
+    auto *signing = static_cast<unsigned char *>(sodium_malloc(crypto_sign_SECRETKEYBYTES));
+    auto *scalar = static_cast<unsigned char *>(sodium_malloc(recipient_box_secret_key_size));
+    const auto release = [&] {
+        sodium_free(seed);
+        sodium_free(signing);
+        sodium_free(scalar);
+    };
+    if (!seed || !signing || !scalar) {
+        release();
+        return CryptoError::AllocationFailed;
+    }
+    std::array<unsigned char, crypto_sign_PUBLICKEYBYTES> signing_public{};
+    const auto exported =
+        identity.export_seed(std::span(reinterpret_cast<std::byte *>(seed), identity_seed_size));
+    if (std::holds_alternative<CryptoError>(exported)) {
+        release();
+        return std::get<CryptoError>(exported);
+    }
+    if (crypto_sign_seed_keypair(signing_public.data(), signing, seed) != 0 ||
+        crypto_sign_ed25519_sk_to_curve25519(scalar, signing) != 0) {
+        release();
+        return CryptoError::OperationFailed;
+    }
+    auto result = import_secret_key(
+        ByteView(reinterpret_cast<const std::byte *>(scalar), recipient_box_secret_key_size));
+    release();
+    return result;
+}
+
 RecipientBoxPublicKey RecipientKeyPair::public_key() const { return public_key_; }
 
 CryptoStatus RecipientKeyPair::export_secret_key(std::span<std::byte> destination) const {
@@ -132,6 +167,23 @@ CryptoResult<Bytes> seal_to_recipient(ByteView recipient_public_key, ByteView pl
         return CryptoError::OperationFailed;
     }
     return ciphertext;
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+CryptoResult<Bytes> seal_to_signing_key(ByteView signing_public_key, ByteView plaintext,
+                                        std::size_t max_plaintext_size) {
+    if (!initialized()) {
+        return CryptoError::InitializationFailed;
+    }
+    if (signing_public_key.size() != signing_public_key_size) {
+        return CryptoError::InvalidLength;
+    }
+    RecipientBoxPublicKey recipient{};
+    if (crypto_sign_ed25519_pk_to_curve25519(mutable_data(std::span(recipient)),
+                                             sodium_data(signing_public_key)) != 0) {
+        return CryptoError::InvalidIdentity;
+    }
+    return seal_to_recipient(recipient, plaintext, max_plaintext_size);
 }
 
 } // namespace p2pdc

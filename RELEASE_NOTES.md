@@ -2,6 +2,10 @@
 
 ## Changes since 0.3.0
 
+- **Sealing to signing keys:** `seal_to_signing_key` seals a box to the X25519 key of an
+  Ed25519 public key, and `RecipientKeyPair::from_identity` derives the keypair that opens
+  it, so an application can send a secret to a user's identity without a separate
+  encryption key.
 - **Native nodes meet through Nostr relays, MQTT brokers and PeerJS servers too.**
   Besides joining the DHT, a native node now uses the Nostr relays, MQTT 5 brokers
   and PeerJS servers of its backend list, all at once with the same rules as
