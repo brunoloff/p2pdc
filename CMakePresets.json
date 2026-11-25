@@ -32,6 +32,58 @@
       }
     },
     {
+      "name": "deps-macos",
+      "displayName": "Dependencies for macOS 13 and later",
+      "inherits": "base",
+      "cacheVariables": {
+        "P2PDC_BUILD_DEPENDENCIES": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+        "CMAKE_INSTALL_PREFIX": "${fileDir}/build/prefix-macos"
+      }
+    },
+    {
+      "name": "macos",
+      "displayName": "macOS library and tests",
+      "description": "Only the dependencies' folder counts, not Homebrew; pass GTest_DIR for GoogleTest.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+        "CMAKE_IGNORE_PREFIX_PATH": "/opt/homebrew;/usr/local",
+        "CMAKE_PREFIX_PATH": "${fileDir}/build/prefix-macos",
+        "BUILD_TESTING": "ON",
+        "P2PDC_BUILD_SHARED_TEXT": "OFF",
+        "P2PDC_TEST_OPENDHT": "ON",
+        "P2PDC_TEST_NATIVE_TRANSPORT": "ON"
+      }
+    },
+    {
+      "name": "deps-windows",
+      "displayName": "Dependencies for Windows (in an MSYS2 UCRT64 shell)",
+      "inherits": "base",
+      "cacheVariables": {
+        "P2PDC_BUILD_DEPENDENCIES": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${fileDir}/build/prefix-windows"
+      }
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows library and tests (in an MSYS2 UCRT64 shell)",
+      "description": "MSYS2 ships the newest GCC, whose new warnings are often false alarms; Linux CI keeps warnings as errors.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_PREFIX_PATH": "${fileDir}/build/prefix-windows",
+        "P2PDC_WERROR": "OFF",
+        "BUILD_TESTING": "ON",
+        "P2PDC_BUILD_SHARED_TEXT": "OFF",
+        "P2PDC_TEST_OPENDHT": "ON",
+        "P2PDC_TEST_NATIVE_TRANSPORT": "ON"
+      }
+    },
+    {
       "name": "emscripten",
       "hidden": true,
       "inherits": "base",
@@ -64,6 +116,10 @@
   "buildPresets": [
     { "name": "deps", "configurePreset": "deps" },
     { "name": "linux", "configurePreset": "linux" },
+    { "name": "deps-macos", "configurePreset": "deps-macos" },
+    { "name": "macos", "configurePreset": "macos" },
+    { "name": "deps-windows", "configurePreset": "deps-windows" },
+    { "name": "windows", "configurePreset": "windows" },
     { "name": "deps-web", "configurePreset": "deps-web" },
     { "name": "web", "configurePreset": "web" }
   ],
@@ -71,6 +127,18 @@
     {
       "name": "linux",
       "configurePreset": "linux",
+      "output": { "outputOnFailure": true },
+      "execution": { "timeout": 300 }
+    },
+    {
+      "name": "macos",
+      "configurePreset": "macos",
+      "output": { "outputOnFailure": true },
+      "execution": { "timeout": 300 }
+    },
+    {
+      "name": "windows",
+      "configurePreset": "windows",
       "output": { "outputOnFailure": true },
       "execution": { "timeout": 300 }
     }
@@ -89,6 +157,20 @@
         { "type": "configure", "name": "linux" },
         { "type": "build", "name": "linux" },
         { "type": "test", "name": "linux" }
+      ]
+    },
+    {
+      "name": "deps-macos",
+      "steps": [
+        { "type": "configure", "name": "deps-macos" },
+        { "type": "build", "name": "deps-macos" }
+      ]
+    },
+    {
+      "name": "deps-windows",
+      "steps": [
+        { "type": "configure", "name": "deps-windows" },
+        { "type": "build", "name": "deps-windows" }
       ]
     },
     {
