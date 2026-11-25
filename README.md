@@ -11,7 +11,7 @@ The idea in my mind was that we could have not only efficient, native apps, but 
 
 Within these constraints, these were the choices that I made:
 * The basecode is in c++ - I thought of using Rust, but compiling an 8mb program in rust creates 30Gb of crate downloads, and I "only" have 512Gb hard drive which is near full, so I went for c++.
-* Peers are discovered via the OpenDHT protocol - this is similar to how bittorrent works.
+* Peers are discovered using one of several protocols: openDHT, MQTT, NOSTR, or PeerJS. openDHT and MQTT are themselves distributed protocols, but you do need some kind of bootstrap node. NOSTR and PeerJS need coordinator/relay nodes, but anyone can setup a coordinator node and it should work.
 * Connections are made through WebRTC - keeps it browser compatible. Users behind restrictive NATs can use TURN servers (popularly used for video conferencing).
 
 The first app I had in mind for this was a shared whiteboard - reminiscent of Google's deceased JamBoard, Miro, Zoom whiteboards, etc. But something which did not depend on a central server at all. The app has an early release version, and for my purpose (online math collaboration) I think it is already better than any app I've ever tried for the same purpose. Here it is:
