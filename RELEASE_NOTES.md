@@ -16,6 +16,15 @@
 - **TLS on Windows:** libdatachannel does not check server certificates on Windows,
   so these connections are not authenticated there (see
   [discovery backends](docs/DISCOVERY_BACKENDS.md#in-native-nodes)).
+- **Fixed on Windows:** about one connection in a hundred never opened its data
+  channel when two connections started at the same moment in one process. With
+  MinGW, the lock guarding libdatachannel's list of SCTP transports let two
+  registrations corrupt it, and every SCTP packet of one connection was then
+  dropped. p2pdc's libdatachannel patch now uses Windows' own reader/writer lock
+  there.
+- GitHub Actions now builds and tests on Linux, in browsers, on macOS (Apple
+  Silicon and Intel) and on Windows (MSYS2), one workflow per platform. The new
+  `deps-macos`, `macos`, `deps-windows` and `windows` presets do the same locally.
 
 ## Breaking change: browser backends are now discovery backends
 
