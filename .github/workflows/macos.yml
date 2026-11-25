@@ -1,0 +1,44 @@
+name: macOS
+
+# Builds and tests the library on macOS, on Apple Silicon and Intel. Each platform has its own
+# workflow, so each reports, shows its logs and can be re-run as soon as it finishes, apart from
+# the others.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel] # Apple Silicon and Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build tools
+        run: brew install ninja meson pkgconf autoconf automake libtool googletest
+      - name: Restore dependencies
+        id: deps
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/prefix-macos
+          key: deps-${{ matrix.runner }}-${{ hashFiles('deps/**', 'patches/**') }}
+      - name: Build dependencies
+        if: steps.deps.outputs.cache-hit != 'true'
+        run: cmake --workflow --preset deps-macos
+      - name: Build
+        # The preset ignores Homebrew, so GoogleTest and node are named here.
+        run: |
+          cmake --preset macos -DGTest_DIR="$(brew --prefix googletest)/lib/cmake/GTest" \
+            -DP2PDC_TEST_NODE_EXECUTABLE="$(command -v node)"
+          cmake --build --preset macos
+      - name: Test
+        run: ctest --preset macos

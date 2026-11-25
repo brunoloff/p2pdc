@@ -11,7 +11,7 @@ using namespace p2pdc;
 using namespace p2pdc::detail;
 
 namespace {
-struct FakeDiscovery final : DiscoveryBackend {
+struct FakeDiscovery final : detail::DiscoveryBackend {
     bool active = true;
     std::optional<LeaseSnapshot> local;
     std::optional<PeerSnapshot> remote;

@@ -1,5 +1,8 @@
 #include "mqtt_codec.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <stdexcept>
 
 namespace p2pdc::detail {
@@ -32,20 +35,32 @@ class Writer {
     Bytes bytes;
 };
 
-void varint(Bytes &out, std::size_t value) {
+// A fixed header: the type and flags, then the body's length in at most four bytes.
+using Header = std::array<std::byte, 5>;
+
+std::size_t header(Header &out, std::uint8_t first, std::size_t length) {
+    out[0] = std::byte{first};
+    std::size_t size = 1;
     do {
-        auto byte = static_cast<std::uint8_t>(value % 128);
-        value /= 128;
-        if (value > 0)
+        auto byte = static_cast<std::uint8_t>(length % 128);
+        length /= 128;
+        if (length > 0)
             byte |= 128;
-        out.push_back(std::byte{byte});
-    } while (value > 0);
+        out.at(size++) = std::byte{byte};
+    } while (length > 0);
+    return size;
 }
 
+// Copies into a vector of the final size: GCC 13 warns, wrongly, about inserting a range.
 Bytes packet(MqttType type, std::uint8_t flags, const Writer &body) {
-    Bytes out{std::byte(static_cast<std::uint8_t>(static_cast<std::uint8_t>(type) << 4 | flags))};
-    varint(out, body.bytes.size());
-    out.insert(out.end(), body.bytes.begin(), body.bytes.end());
+    Header head{};
+    const auto size =
+        header(head, static_cast<std::uint8_t>(static_cast<std::uint8_t>(type) << 4 | flags),
+               body.bytes.size());
+    Bytes out(size + body.bytes.size());
+    std::copy_n(head.begin(), size, out.begin());
+    std::copy(body.bytes.begin(), body.bytes.end(),
+              out.begin() + static_cast<std::ptrdiff_t>(size));
     return out;
 }
 
